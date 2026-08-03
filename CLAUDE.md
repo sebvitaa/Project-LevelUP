@@ -153,3 +153,34 @@ This project has domain-specific skills available in `**/skills/**`. You MUST ac
 - Do NOT delete tests without approval.
 
 </laravel-boost-guidelines>
+
+# Project LevelUp
+
+## Documentación de arquitectura (obligatorio)
+
+`docs/arquitectura.md` es el registro vivo de la arquitectura. **Cada vez que se agregue o
+cambie una carpeta, archivo, ruta, tabla, columna o decisión de diseño, hay que actualizar
+ese documento en el mismo cambio.** Si algo existe en el código y no está documentado ahí,
+el documento está desactualizado y corregirlo es parte de la tarea, no un extra.
+
+Qué mantener al día:
+- Sección 3 — estructura de carpetas, archivo por archivo
+- Sección 4 — modelo de datos, columna por columna
+- Sección 5 — tabla de rutas
+- Sección 2 — decisiones de arquitectura, siempre con el *porqué*
+- Sección 12 — lo que falta
+
+El README apunta a ese documento; no duplicar el detalle en el README.
+
+## Git
+
+Nunca ejecutar `git add`, `git commit` ni `git push` en este repositorio. El control de
+versiones lo maneja el equipo a mano.
+
+## Contexto del proyecto
+
+- Las seis pantallas del flujo están diseñadas en `docs/mockups/project-levelup-mockups.html`.
+- Malla de referencia usada en mockups, seeder y tests: A→C→D→F→G→H = 39 días, con 6 días
+  de holgura en B y E. Si un cambio la altera, revisar los tres lugares.
+- `Model::shouldBeStrict()` está activo fuera de producción: nada de *lazy loading* ni de
+  atributos faltantes. Usar `loadMissing()` cuando el modelo llega por *route model binding*.

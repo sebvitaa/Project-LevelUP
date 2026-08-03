@@ -3,7 +3,45 @@
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
 @source '../../storage/framework/views/*.php';
 
+/*
+ * Tokens de la identidad de Project LevelUp.
+ * Referencia visual completa: docs/mockups/project-levelup-mockups.html
+ * Decisiones y justificación: docs/arquitectura.md
+ */
 @theme {
     --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
+    --font-mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+
+    /* Azul de marca */
+    --color-brand-50: #f2f5ff;
+    --color-brand-100: #e8edff;
+    --color-brand-500: #2b57f6;
+    --color-brand-600: #1a3fd0;
+
+    /* Neutros con sesgo azul */
+    --color-ink-50: #f7f9fe;
+    --color-ink-100: #eef2fb;
+    --color-ink-200: #e3e8f4;
+    --color-ink-300: #d3dbee;
+    --color-ink-500: #66718c;
+    --color-ink-700: #3c465e;
+    --color-ink-900: #0b1220;
+
+    /* Semánticos: separados del acento de marca */
+    --color-done: #12a57a;
+    --color-slack: #e5a03a;
+    --color-critical: #e0524a;
+}
+
+/* Trama de puntos: el mismo motivo del logo. */
+@utility bg-dots {
+    background-image: radial-gradient(rgba(43, 87, 246, 0.1) 1px, transparent 1px);
+    background-size: 22px 22px;
+}
+
+/* Cifras CPM alineadas en columna. */
+@utility num {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
 }

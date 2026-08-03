@@ -30,6 +30,10 @@ class UserFactory extends Factory
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
             'remember_token' => Str::random(10),
+            // Espeja los valores por defecto de la migración para que el modelo
+            // en memoria tenga los mismos atributos que uno leído de la base.
+            'ai_credits_limit' => 20,
+            'ai_credits_used' => 0,
         ];
     }
 
@@ -40,6 +44,14 @@ class UserFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'email_verified_at' => null,
+        ]);
+    }
+
+    /** Usuario que ya gastó toda su cuota mensual de generaciones. */
+    public function withoutAiCredits(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'ai_credits_used' => $attributes['ai_credits_limit'] ?? 20,
         ]);
     }
 }

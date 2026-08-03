@@ -1,58 +1,138 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Project LevelUp
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Convierte la descripción de un proyecto, escrita en lenguaje natural, en un cronograma
+**CPM** con ruta crítica, holguras y dependencias calculadas. La IA identifica las
+actividades; el servidor resuelve la malla.
 
-## About Laravel
+**IIP323W — Tecnologías y Aplicaciones Web y Móviles** · Unidad 3 (Laravel) · Sección 1
+Gabriel Marín ([gmarinr@udd.cl](mailto:gmarinr@udd.cl)) · Sebastián Ramírez ([seramirezo@udd.cl](mailto:seramirezo@udd.cl))
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+---
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## El problema
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+Planificar un proyecto grande a mano es lento y estimar dependencias entre decenas de
+actividades es propenso al error. Las herramientas que sí lo hacen bien exigen que el
+usuario arme la malla nodo por nodo.
 
-## Learning Laravel
+Project LevelUp cierra esa brecha: describes el proyecto en un párrafo y obtienes el
+cronograma en minutos.
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+---
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+## El flujo
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
-
-```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+```
+01 Login/Registro → 02 Dashboard → 03 Tipo de proyecto → 04 Prompt
+                         ↑                                    ↓
+                         └──────── 06 Malla CPM ←──── 05 Generando
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+| # | Pantalla | Qué hace |
+|---|---|---|
+| 01 | Login / Registro | Sesión con cuota mensual de generaciones |
+| 02 | Dashboard | Proyectos con % de avance, fecha límite y estado |
+| 03 | Tipo de proyecto | Ajusta el vocabulario y las actividades que sugerirá la IA |
+| 04 | Prompt | Descripción libre + fechas y tamaño del equipo |
+| 05 | Generando | Job en cola; la vista consulta el estado cada 2 s |
+| 06 | Malla CPM | Nodos, aristas, ruta crítica y ficha de cada actividad |
 
-## Contributing
+Los mockups de las seis pantallas están en
+[`docs/mockups/project-levelup-mockups.html`](docs/mockups/project-levelup-mockups.html).
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+---
 
-## Code of Conduct
+## Arquitectura
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+```
+Prompt del usuario
+      │
+      ▼
+PromptBuilder ──► GeminiClient ──► Gemini 2.5 Flash
+      │                                   │
+      │            actividades, duraciones, precedentes (JSON)
+      ▼                                   │
+ProjectPlanGenerator ◄────────────────────┘
+      │
+      ├─► valida la forma de la respuesta
+      ├─► CpmCalculator  ES/EF · LS/LF · holguras · ruta crítica · layout
+      └─► guarda en una transacción: projects, activities, activity_dependencies
+```
 
-## Security Vulnerabilities
+**La decisión que define el proyecto:** a la IA se le piden solo actividades, duraciones y
+precedentes. El CPM lo calcula PHP. Un modelo de lenguaje no es una herramienta de cálculo
+confiable; el CPM es un algoritmo determinista, y hacerlo en el servidor lo vuelve
+reproducible, testeable sin red y gratis.
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+### Capas
 
-## License
+| Carpeta | Responsabilidad |
+|---|---|
+| `app/Services/Cpm/` | Algoritmo CPM puro, sin Eloquent ni base de datos |
+| `app/Services/Ai/` | Prompt, cliente HTTP de Gemini y orquestación del plan |
+| `app/Jobs/` | Generación en cola, fuera del ciclo de request |
+| `app/Http/Controllers/` | Una clase por pantalla del flujo |
+| `app/Policies/` | Un proyecto solo lo ve y lo toca su dueño |
+| `resources/views/` | Blade + Tailwind v4, sin framework de frontend |
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+**La documentación completa de la arquitectura está en
+[`docs/arquitectura.md`](docs/arquitectura.md)**: decisiones y su porqué, estructura de
+carpetas archivo por archivo, modelo de datos, tabla de rutas, el algoritmo paso a paso y
+la cobertura de pruebas. Ese documento se mantiene al día con cada cambio del proyecto.
+
+---
+
+## Stack
+
+- PHP 8.4 · Laravel 13
+- MySQL en despliegue, SQLite en desarrollo y pruebas
+- Google Gemini 2.5 Flash (plan gratuito) vía el cliente HTTP de Laravel
+- Blade + Tailwind CSS v4
+- Pest 5 para las pruebas · Pint para el formato
+
+---
+
+## Puesta en marcha
+
+```bash
+composer install
+npm install
+
+cp .env.example .env
+php artisan key:generate
+# Agregar GEMINI_API_KEY al .env
+
+php artisan migrate --seed
+composer run dev
+```
+
+`composer run dev` levanta el servidor, la cola y Vite a la vez. **La cola tiene que estar
+corriendo**, o la pantalla 05 se queda esperando para siempre.
+
+El seed crea un proyecto de demostración con la misma malla de los mockups
+(ruta crítica de 39 días), accesible con `demo@levelup.test` / `password`.
+
+---
+
+## Pruebas
+
+```bash
+php artisan test --compact          # 46 pruebas
+php artisan test --filter=CpmCalculatorTest
+vendor/bin/pint                     # formato antes de cerrar cualquier cambio
+```
+
+La malla de referencia — A→C→D→F→G→H, 39 días, con 6 días de holgura en B y E — se usa
+como caso de verificación en los tests unitarios, en el seeder y en los mockups. Si los
+tres coinciden, el cálculo está bien.
+
+---
+
+## Estado
+
+Funcionando de punta a punta: registro, creación asistida, generación con IA, cálculo CPM,
+malla navegable y edición de actividades con recálculo automático de la ruta crítica.
+
+Pendiente: llevar las vistas a la fidelidad visual de los mockups, vistas Gantt y Lista,
+exportar y compartir. La lista completa está al final de
+[`docs/arquitectura.md`](docs/arquitectura.md).
