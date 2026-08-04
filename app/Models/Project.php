@@ -17,6 +17,9 @@ class Project extends Model
     /** @use HasFactory<ProjectFactory> */
     use HasFactory;
 
+    /** Días de margen bajo los cuales un proyecto se considera en riesgo. */
+    public const RISK_THRESHOLD_DAYS = 7;
+
     protected $fillable = [
         'name',
         'type',
@@ -72,13 +75,39 @@ class Project extends Model
      */
     public function completionPercentage(): int
     {
-        $total = $this->activities()->count();
+        [$total, $completed] = $this->activityCounts();
 
         if ($total === 0) {
             return 0;
         }
 
-        return (int) round($this->activities()->whereNotNull('completed_at')->count() / $total * 100);
+        return (int) round($completed / $total * 100);
+    }
+
+    /**
+     * Conteos de actividades, aprovechando los `withCount` del dashboard si el
+     * modelo ya los trae. Sin ellos, cada tarjeta dispararía dos consultas.
+     *
+     * @return array{0: int, 1: int} [total, completadas]
+     */
+    private function activityCounts(): array
+    {
+        // Ambos conteos o ninguno: con solo uno, el porcentaje saldría mal en
+        // silencio en vez de fallar.
+        $hasCounts = array_key_exists('activities_count', $this->attributes)
+            && array_key_exists('completed_activities_count', $this->attributes);
+
+        if ($hasCounts) {
+            return [
+                (int) $this->attributes['activities_count'],
+                (int) $this->attributes['completed_activities_count'],
+            ];
+        }
+
+        return [
+            $this->activities()->count(),
+            $this->activities()->whereNotNull('completed_at')->count(),
+        ];
     }
 
     /**
@@ -110,6 +139,50 @@ class Project extends Model
     public function isOverdue(): bool
     {
         return ($this->daysBehindSchedule() ?? 0) > 0;
+    }
+
+    public function isCompleted(): bool
+    {
+        return $this->completionPercentage() === 100;
+    }
+
+    /**
+     * Un proyecto está en riesgo si ya se pasó de la fecha límite, si le queda
+     * menos de una semana de margen, o si la generación de la malla falló.
+     *
+     * El umbral de 7 días es la ventana en la que todavía se puede reaccionar
+     * moviendo gente: más abajo de eso ya no hay margen de maniobra.
+     */
+    public function isAtRisk(): bool
+    {
+        if ($this->status === ProjectStatus::Failed) {
+            return true;
+        }
+
+        if ($this->isCompleted()) {
+            return false;
+        }
+
+        $daysBehind = $this->daysBehindSchedule();
+
+        return $daysBehind !== null && $daysBehind > -self::RISK_THRESHOLD_DAYS;
+    }
+
+    /**
+     * Color semántico del proyecto, compartido por la tarjeta y el punto de la
+     * barra lateral para que ambos digan lo mismo.
+     *
+     * @return 'done'|'critical'|'slack'|'brand'
+     */
+    public function healthTone(): string
+    {
+        return match (true) {
+            $this->isCompleted() => 'done',
+            $this->isOverdue(), $this->status === ProjectStatus::Failed => 'critical',
+            $this->isAtRisk() => 'slack',
+            $this->status === ProjectStatus::Ready => 'done',
+            default => 'brand',
+        };
     }
 
     /**

@@ -78,7 +78,13 @@ reproducible, testeable sin red y gratis.
 **La documentación completa de la arquitectura está en
 [`docs/arquitectura.md`](docs/arquitectura.md)**: decisiones y su porqué, estructura de
 carpetas archivo por archivo, modelo de datos, tabla de rutas, el algoritmo paso a paso y
-la cobertura de pruebas. Ese documento se mantiene al día con cada cambio del proyecto.
+la cobertura de pruebas.
+
+El dashboard tiene además su propia referencia en
+[`docs/Dashboard.md`](docs/Dashboard.md): cada elemento, de dónde sale cada dato, las
+reglas de estado, las conexiones con las otras pantallas y la BD provisional.
+
+Ambos documentos se mantienen al día en el mismo cambio que modifica el código.
 
 ---
 
@@ -87,7 +93,7 @@ la cobertura de pruebas. Ese documento se mantiene al día con cada cambio del p
 - PHP 8.4 · Laravel 13
 - MySQL en despliegue, SQLite en desarrollo y pruebas
 - Google Gemini 2.5 Flash (plan gratuito) vía el cliente HTTP de Laravel
-- Blade + Tailwind CSS v4
+- Blade + Tailwind CSS v4, con la tipografía del sistema (sin fuentes remotas)
 - Pest 5 para las pruebas · Pint para el formato
 
 ---
@@ -109,15 +115,16 @@ composer run dev
 `composer run dev` levanta el servidor, la cola y Vite a la vez. **La cola tiene que estar
 corriendo**, o la pantalla 05 se queda esperando para siempre.
 
-El seed crea un proyecto de demostración con la misma malla de los mockups
-(ruta crítica de 39 días), accesible con `demo@levelup.test` / `password`.
+El seed crea una cartera de demostración con cinco proyectos —uno por cada estado
+posible— y mallas CPM reales, accesible con `demo@levelup.test` / `password`.
+El detalle está en [`docs/Dashboard.md`](docs/Dashboard.md).
 
 ---
 
 ## Pruebas
 
 ```bash
-php artisan test --compact          # 46 pruebas
+php artisan test --compact          # 57 pruebas
 php artisan test --filter=CpmCalculatorTest
 vendor/bin/pint                     # formato antes de cerrar cualquier cambio
 ```
@@ -133,6 +140,6 @@ tres coinciden, el cálculo está bien.
 Funcionando de punta a punta: registro, creación asistida, generación con IA, cálculo CPM,
 malla navegable y edición de actividades con recálculo automático de la ruta crítica.
 
-Pendiente: llevar las vistas a la fidelidad visual de los mockups, vistas Gantt y Lista,
-exportar y compartir. La lista completa está al final de
-[`docs/arquitectura.md`](docs/arquitectura.md).
+El dashboard está terminado a fidelidad de mockup. Pendiente: llevar las otras cinco
+pantallas al mismo nivel visual, vistas Gantt y Lista, buscador, exportar y compartir.
+La lista completa está al final de [`docs/arquitectura.md`](docs/arquitectura.md).

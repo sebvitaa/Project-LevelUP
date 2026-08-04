@@ -14,6 +14,8 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        $this->call(DemoProjectSeeder::class);
+        // Base de datos provisional: la cartera completa del dashboard.
+        // Incluye a DemoProjectSeeder, que aporta la malla de referencia.
+        $this->call(DashboardDemoSeeder::class);
     }
 }

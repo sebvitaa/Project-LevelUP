@@ -5,33 +5,51 @@
 
 /*
  * Tokens de la identidad de Project LevelUp.
- * Referencia visual completa: docs/mockups/project-levelup-mockups.html
- * Decisiones y justificación: docs/arquitectura.md
+ *
+ * Los valores son exactamente los del mockup de referencia:
+ * docs/mockups/project-levelup-mockups.html — sección "Sistema de diseño".
+ * Cada token de aquí tiene su equivalente ahí; si uno cambia, cambian los dos.
+ * Justificación de las decisiones: docs/arquitectura.md y docs/Dashboard.md.
  */
 @theme {
-    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
-        'Segoe UI Symbol', 'Noto Color Emoji';
-    --font-mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+    /*
+     * Grotesca geométrica del sistema, igual que el mockup: SF Pro en macOS,
+     * Segoe UI en Windows. Es la familia "tipo ClickUp" que pidió el cliente y
+     * evita depender de una fuente remota que pueda no cargar.
+     */
+    --font-sans: ui-sans-serif, -apple-system, 'SF Pro Text', 'SF Pro Display', 'Segoe UI', Roboto,
+        'Helvetica Neue', Arial, sans-serif;
+    --font-mono: ui-monospace, 'SF Mono', SFMono-Regular, 'JetBrains Mono', Menlo, Consolas, monospace;
 
-    /* Azul de marca */
+    /* Azul de marca: el único acento. */
     --color-brand-50: #f2f5ff;
     --color-brand-100: #e8edff;
     --color-brand-500: #2b57f6;
     --color-brand-600: #1a3fd0;
 
-    /* Neutros con sesgo azul */
+    /* Neutros con sesgo azul: ninguno es gris puro. */
+    --color-page: #f4f6fc;
     --color-ink-50: #f7f9fe;
     --color-ink-100: #eef2fb;
     --color-ink-200: #e3e8f4;
     --color-ink-300: #d3dbee;
+    --color-ink-400: #949db6;
     --color-ink-500: #66718c;
     --color-ink-700: #3c465e;
     --color-ink-900: #0b1220;
 
-    /* Semánticos: separados del acento de marca */
+    /* Semánticos: deliberadamente separados del acento de marca. */
     --color-done: #12a57a;
+    --color-done-soft: #e2f6ef;
     --color-slack: #e5a03a;
+    --color-slack-soft: #fdf3e2;
     --color-critical: #e0524a;
+    --color-critical-soft: #fdecea;
+
+    /* Avatares: los tres tonos del mockup. */
+    --color-avatar-blue: #2b57f6;
+    --color-avatar-violet: #7b5cf0;
+    --color-avatar-amber: #e5a03a;
 }
 
 /* Trama de puntos: el mismo motivo del logo. */
@@ -40,8 +58,15 @@
     background-size: 22px 22px;
 }
 
-/* Cifras CPM alineadas en columna. */
+/* Cifras alineadas en columna: duraciones, ES/EF/LS/LF, porcentajes, fechas. */
 @utility num {
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
+}
+
+/* Sombras del mockup: muy suaves y azuladas. */
+@utility shadow-card {
+    box-shadow:
+        0 1px 2px rgba(11, 18, 32, 0.05),
+        0 12px 32px -12px rgba(11, 18, 32, 0.18);
 }

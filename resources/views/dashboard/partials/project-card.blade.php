@@ -1,20 +1,23 @@
 @php
     use App\Enums\ProjectStatus;
 
-    $completion = $project->activities_count > 0
-        ? (int) round($project->completed_activities_count / $project->activities_count * 100)
-        : 0;
-
-    $isOverdue = $project->isOverdue();
+    /**
+     * Tarjeta de proyecto de la grilla del dashboard.
+     *
+     * El estado se codifica dos veces a propósito: en la pastilla (texto) y en
+     * el color de la barra. Ninguna información depende solo del color.
+     */
+    $completion = $project->completionPercentage();
     $daysBehind = $project->daysBehindSchedule();
 
     [$badgeLabel, $badgeClasses, $barClasses] = match (true) {
         $project->status === ProjectStatus::Draft => ['Borrador', 'bg-brand-100 text-brand-600', 'bg-brand-500'],
         $project->status === ProjectStatus::Generating => ['Generando', 'bg-brand-100 text-brand-600', 'bg-brand-500'],
-        $project->status === ProjectStatus::Failed => ['Falló', 'bg-critical/10 text-critical', 'bg-critical'],
-        $completion === 100 => ['Completado', 'bg-done/10 text-done', 'bg-done'],
-        $isOverdue => ['Atrasado '.$daysBehind.' d', 'bg-critical/10 text-critical', 'bg-critical'],
-        default => ['En plazo', 'bg-done/10 text-done', 'bg-brand-500'],
+        $project->status === ProjectStatus::Failed => ['Falló la generación', 'bg-critical-soft text-critical', 'bg-critical'],
+        $completion === 100 => ['Completado', 'bg-done-soft text-done', 'bg-done'],
+        $project->isOverdue() => ["Atrasado {$daysBehind} d", 'bg-critical-soft text-critical', 'bg-critical'],
+        $project->isAtRisk() => ['Holgura baja', 'bg-slack-soft text-slack', 'bg-slack'],
+        default => ['En plazo', 'bg-done-soft text-done', 'bg-brand-500'],
     };
 
     $target = $project->status === ProjectStatus::Ready
@@ -22,35 +25,47 @@
         : route('projects.generating', $project);
 @endphp
 
-<a href="{{ $target }}" class="flex flex-col gap-3 rounded-xl border border-ink-200 p-4 hover:border-ink-300 hover:shadow-sm">
+<a href="{{ $target }}"
+   class="flex flex-col gap-3 rounded-xl border border-ink-200 bg-white p-4 transition hover:border-ink-300 hover:shadow-card">
+
     <div class="flex items-start justify-between gap-2.5">
         <div class="min-w-0">
-            <h3 class="truncate text-[15px] font-semibold tracking-tight">{{ $project->name }}</h3>
-            <p class="mt-0.5 text-xs text-ink-500">
-                {{ $project->type->label() }} · {{ $project->activities_count }} {{ Str::plural('actividad', $project->activities_count) }}
+            <h3 class="truncate text-[14.5px] font-semibold leading-tight tracking-tight">{{ $project->name }}</h3>
+            <p class="mt-[3px] text-[11.5px] text-ink-400">
+                {{ $project->type->label() }} ·
+                {{ $project->activities_count }} {{ trans_choice('{1} actividad|[0,*] actividades', $project->activities_count) }}
             </p>
         </div>
-        <span class="flex-none rounded-full px-2.5 py-0.5 text-[11px] font-semibold {{ $badgeClasses }}">
+
+        <span class="flex h-[22px] flex-none items-center gap-[5px] rounded-full px-2.5 text-[11px] font-semibold {{ $badgeClasses }}">
+            <span class="size-1.5 rounded-full bg-current"></span>
             {{ $badgeLabel }}
         </span>
     </div>
 
     <div class="flex items-baseline justify-between">
-        <span class="num text-sm font-semibold">{{ $completion }}%</span>
-        <span class="num text-xs {{ $isOverdue ? 'text-critical' : 'text-ink-500' }}">
-            {{ $project->deadline?->translatedFormat('d M Y') ?? 'Sin fecha' }}
+        <span class="num text-[12.5px] font-semibold">{{ $completion }}%</span>
+        <span class="num text-[11.5px] {{ $project->isOverdue() ? 'text-critical' : 'text-ink-400' }}">
+            {{ $project->deadline?->translatedFormat('j M Y') ?? 'Sin fecha' }}
         </span>
     </div>
 
-    <div class="h-1.5 overflow-hidden rounded-full bg-ink-100">
+    <div class="h-[5px] overflow-hidden rounded-full bg-ink-100">
         <div class="h-full rounded-full {{ $barClasses }}" style="width: {{ max($completion, 2) }}%"></div>
     </div>
 
-    <p class="num text-xs text-ink-500">
-        @if ($project->total_duration_days)
-            {{ $project->total_duration_days }} d · {{ $project->critical_activities_count }} en ruta crítica
-        @else
-            Falta generar la malla
-        @endif
-    </p>
+    <div class="flex items-center justify-between gap-2">
+        {{-- Sin modelo de equipo todavía: el dashboard solo lista proyectos
+             propios, así que la persona dueña es siempre quien tiene sesión. --}}
+        <x-avatar :user="auth()->user()" size="sm" />
+
+        <span class="num text-[11.5px] text-ink-500">
+            @if ($project->total_duration_days !== null)
+                {{ $project->total_duration_days }} d ·
+                {{ $project->critical_activities_count }} en ruta crítica
+            @else
+                Falta generar la malla
+            @endif
+        </span>
+    </div>
 </a>

@@ -6,6 +6,9 @@
 > archivo está desactualizado y hay que corregirlo. Así seguirá siendo durante todo el
 > desarrollo.
 
+**Documentos hermanos:** [`Dashboard.md`](Dashboard.md) — referencia completa de la
+pantalla 02 (elementos, orígenes de datos, estados, conexiones y BD provisional).
+
 **Proyecto:** Project LevelUp — IIP323W, Unidad 3 (Laravel)
 **Equipo:** Gabriel Marín (frontend) · Sebastián Ramírez (backend)
 **Última actualización:** 3 de agosto de 2026
@@ -85,6 +88,8 @@ esqueleto estándar de Laravel sin modificar.
 ```
 app/
 ├── Enums/
+│   ├── DashboardFilter.php        Pestañas del dashboard: todos · riesgo · completados
+│   ├── DashboardSort.php          Orden: fecha límite · avance · nombre
 │   ├── ProjectStatus.php          Draft · Generating · Ready · Failed
 │   └── ProjectType.php            6 tipos + su contexto de dominio para el prompt
 ├── Exceptions/
@@ -110,7 +115,7 @@ app/
 │   └── GenerateProjectSchedule.php   Job en cola: IA → CPM → persistencia
 ├── Models/
 │   ├── Activity.php                  Nodo de la malla
-│   ├── Project.php                   Proyecto y sus métricas de avance
+│   ├── Project.php                   Avance, atraso, riesgo y color semántico
 │   └── User.php                      + relación projects() y cuota de IA
 ├── Policies/
 │   └── ProjectPolicy.php             Un proyecto solo lo ve y lo toca su dueño
@@ -136,17 +141,19 @@ database/
 │   ├── 2026_08_03_195335_create_activity_dependencies_table.php
 │   └── 2026_08_03_195336_add_ai_credits_to_users_table.php
 └── seeders/
-    ├── DatabaseSeeder.php
-    └── DemoProjectSeeder.php         Proyecto demo con la malla de los mockups
+    ├── DashboardDemoSeeder.php       BD provisional: la cartera del dashboard
+    ├── DatabaseSeeder.php            Llama a DashboardDemoSeeder
+    └── DemoProjectSeeder.php         Dueño único de la malla de referencia
 
 docs/
 ├── arquitectura.md                   Este archivo
+├── Dashboard.md                      Referencia completa de la pantalla 02
 ├── mockups/
 │   └── project-levelup-mockups.html  Las 6 pantallas + sistema de diseño
 └── plantilla-propuesta-laravel.docx  Propuesta entregada al ramo
 
 resources/
-├── css/app.css                       Tokens de marca en @theme (Tailwind v4)
+├── css/app.css                       Tokens de color y tipografía en @theme
 └── views/
     ├── auth/
     │   ├── login.blade.php           Pantalla 01
@@ -155,10 +162,17 @@ resources/
     │   ├── layouts/
     │   │   ├── app.blade.php         Layout con sidebar, para sesión iniciada
     │   │   └── guest.blade.php       Layout partido con panel de marca
-    │   └── logo.blade.php            Logo de puntos
+    │   ├── avatar.blade.php          Iniciales con color estable por persona
+    │   ├── logo.blade.php            Logo de puntos
+    │   └── nav-icon.blade.php        Iconos de 16×16, trazo 1.6
     ├── dashboard/
     │   ├── index.blade.php           Pantalla 02
-    │   └── partials/project-card.blade.php
+    │   └── partials/
+    │       ├── filter-tabs.blade.php     Pestañas de filtro
+    │       ├── kpi-row.blade.php         Las cuatro tarjetas de métricas
+    │       ├── project-card.blade.php    Tarjeta de proyecto
+    │       ├── sort-menu.blade.php       Menú de orden (<details> nativo)
+    │       └── sparkline.blade.php       Miniatura de tendencia (SVG)
     ├── layouts/
     │   └── sidebar.blade.php         Navegación lateral + medidor de consultas
     └── projects/
@@ -174,7 +188,7 @@ resources/
 tests/
 ├── Feature/
 │   ├── AuthenticationTest.php        Login, registro, logout, rutas protegidas
-│   ├── DashboardTest.php             Aislamiento por usuario y cálculo de avance
+│   ├── DashboardTest.php             KPI, filtros, orden, estados e idioma
 │   ├── ExampleTest.php               Redirección de la raíz
 │   ├── ProjectScreenTest.php         Humo sobre la malla + recálculo al editar
 │   ├── ProjectWizardTest.php         Asistente, validación y autorización
@@ -339,21 +353,39 @@ En `config/services.php`, leyendo del `.env`:
 
 ```
 GEMINI_API_KEY=          # obligatoria en producción
-GEMINI_MODEL=gemini-2.5-flash
+GEMINI_MODEL=gemini-3.5-flash
 GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1beta
 GEMINI_TIMEOUT=60
 ```
+
+El modelo era `gemini-2.5-flash` hasta el 03-08-2026. Google lo dio de baja para claves
+nuevas y el endpoint responde `404 NOT_FOUND` con el mensaje *"no longer available to new
+users"*, así que se pasó a `gemini-3.5-flash`. Los modelos habilitados para una clave se
+consultan con `GET {base_url}/models`; si vuelve a aparecer un 404 sistemático, ese es el
+primer lugar donde mirar.
+
+`GEMINI_TIMEOUT=60` no es holgado: una generación real de 11 actividades tardó ~24 s.
 
 ---
 
 ## 8. Frontend
 
-- **Blade + Tailwind v4.** Los tokens de marca están en `@theme` dentro de
-  `resources/css/app.css`: `brand-*` para el azul, `ink-*` para los neutros con sesgo azul,
-  y `done` / `slack` / `critical` como colores semánticos, deliberadamente separados del
-  acento de marca.
+- **Blade + Tailwind v4.** Los tokens están en `@theme` dentro de
+  `resources/css/app.css`, con los mismos valores que el mockup: `brand-*` para el azul,
+  `ink-*` para los neutros con sesgo azul, y `done` / `slack` / `critical` como colores
+  semánticos, deliberadamente separados del acento de marca.
+- **Tipografía del sistema**, la misma del mockup: SF Pro en macOS, Segoe UI en Windows.
+  Se quitó Instrument Sans del `vite.config.js` —venía del esqueleto y no es la fuente del
+  diseño—, así que la aplicación no descarga ninguna fuente remota.
+- **Cifras en monoespaciada con `tabular-nums`** (utilidad `.num`) en todo dato que se lea
+  en columna: porcentajes, duraciones, ES/EF/LS/LF y fechas.
 - **Dos layouts:** `<x-layouts.app>` con sidebar para sesión iniciada,
   `<x-layouts.guest>` partido con panel de marca para login y registro.
+- **Los nombres de clase de Tailwind nunca se concatenan en tiempo de ejecución**
+  (`bg-{{ $tono }}` no compila, porque Tailwind escanea los archivos buscando literales).
+  Donde el color depende de datos, la vista tiene un arreglo con las clases completas.
+- **Idioma:** `APP_LOCALE=es`. No se usa `Str::plural`, que aplica reglas del inglés y
+  convierte «actividad» en «actividads»; los plurales van con `trans_choice`.
 - **La malla es SVG + posicionamiento absoluto**, sin librería de grafos. Las coordenadas
   salen de `grid_column` / `grid_row`, que ya vienen calculados desde el servidor.
 - **JavaScript, lo mínimo:** solo el *polling* de la pantalla 05. No hay framework de
@@ -365,13 +397,13 @@ GEMINI_TIMEOUT=60
 
 ## 9. Pruebas
 
-46 pruebas, 126 aserciones. `php artisan test --compact`.
+57 pruebas. `php artisan test --compact`.
 
 | Archivo | Qué cubre |
 |---|---|
 | `Unit/CpmCalculatorTest.php` | Ambas pasadas, holguras, ruta crítica, layout, ramas paralelas, y los tres errores del grafo (ciclo, precedente inexistente, código repetido) |
 | `Feature/AuthenticationTest.php` | Login correcto e incorrecto, registro, logout, rutas protegidas |
-| `Feature/DashboardTest.php` | Aislamiento por usuario, cálculo del % de avance, estado vacío |
+| `Feature/DashboardTest.php` | Aislamiento por usuario, KPI, filtros, orden, los cinco estados de proyecto, estados vacíos, plurales y fechas en español |
 | `Feature/ProjectWizardTest.php` | Los dos pasos, validaciones, encolado del job, cuota agotada, proyecto ajeno |
 | `Feature/ScheduleGenerationTest.php` | Integración completa con `Http::fake()`: malla guardada, dependencias, crédito descontado solo al resultar, API caída, plan circular, regeneración |
 | `Feature/ProjectScreenTest.php` | Renderizado de la malla, selección de actividad, marcar hecha, recálculo del CPM al editar una duración |
@@ -392,11 +424,12 @@ php artisan key:generate
 
 # Agregar GEMINI_API_KEY al .env
 
-php artisan migrate --seed   # crea el proyecto demo con la malla de los mockups
+php artisan migrate --seed   # cartera de demostración del dashboard
 composer run dev             # servidor + cola + Vite
 ```
 
-Usuario de demostración: `demo@levelup.test` / `password`.
+Usuario de demostración: `demo@levelup.test` / `password`. El detalle de lo que
+siembra está en [`Dashboard.md`](Dashboard.md), sección 8.
 
 La cola tiene que estar corriendo (`php artisan queue:work`, incluido en `composer run
 dev`) o la pantalla 05 se queda esperando para siempre.
@@ -423,8 +456,10 @@ pendientes de decisión del equipo:
 
 ## 12. Qué falta
 
-- [ ] Llevar las vistas Blade a la fidelidad visual de los mockups (hoy son funcionales,
-      con los tokens correctos, pero más sobrias).
+- [ ] Llevar las pantallas 01 y 03 a 06 a la fidelidad visual de los mockups. La 02
+      (dashboard) ya está; ver [`Dashboard.md`](Dashboard.md).
+- [ ] Buscador del dashboard: el campo existe, la búsqueda no.
+- [ ] Modelo de equipo, para que las tarjetas muestren la pila de avatares del mockup.
 - [ ] Vistas Gantt y Lista de la pantalla 06 (las pestañas están diseñadas, no
       implementadas).
 - [ ] Exportar y compartir el proyecto.
