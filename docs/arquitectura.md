@@ -32,7 +32,7 @@ El flujo son seis pantallas, diseñadas en
 
 ## 2. Decisiones de arquitectura
 
-Las cinco decisiones que explican por qué el código está organizado así.
+Las seis decisiones que explican por qué el código está organizado así.
 
 ### 2.1 El CPM se calcula en el servidor, no en el prompt
 
@@ -75,6 +75,15 @@ la tabla `projects` recién nace en el paso 2.
 
 **Por qué:** si el usuario abandona el asistente, no quedan filas huérfanas en la base.
 
+### 2.6 El progreso de generación se registra como metadata del proyecto
+
+El proyecto conserva el hito actual, el número de intento y las marcas de tiempo de inicio y
+progreso. `ProjectGenerationStage` limita los valores posibles a hitos observables del backend;
+el porcentaje y las transiciones se implementarán en las unidades siguientes.
+
+**Por qué:** el polling necesita distinguir un trabajo activo, un intento antiguo y un proceso
+estancado sin inventar progreso basado en tiempo ni duplicar el estado en otra tabla.
+
 ---
 
 ## 3. Estructura de carpetas
@@ -86,7 +95,8 @@ esqueleto estándar de Laravel sin modificar.
 app/
 ├── Enums/
 │   ├── ProjectStatus.php          Draft · Generating · Ready · Failed
-│   └── ProjectType.php            6 tipos + su contexto de dominio para el prompt
+│   ├── ProjectType.php            6 tipos + su contexto de dominio para el prompt
+│   └── ProjectGenerationStage.php  Hitos observables de la generación
 ├── Exceptions/
 │   └── PlanGenerationException.php  Errores de generación, con mensaje para el usuario
 ├── Http/
@@ -134,7 +144,8 @@ database/
 │   ├── 2026_08_03_195333_create_projects_table.php
 │   ├── 2026_08_03_195334_create_activities_table.php
 │   ├── 2026_08_03_195335_create_activity_dependencies_table.php
-│   └── 2026_08_03_195336_add_ai_credits_to_users_table.php
+│   ├── 2026_08_03_195336_add_ai_credits_to_users_table.php
+│   └── 2026_08_11_000000_add_generation_metadata_to_projects_table.php
 └── seeders/
     ├── DatabaseSeeder.php
     └── DemoProjectSeeder.php         Proyecto demo con la malla de los mockups
@@ -180,7 +191,8 @@ tests/
 │   ├── ProjectWizardTest.php         Asistente, validación y autorización
 │   └── ScheduleGenerationTest.php    Integración con Gemini vía Http::fake()
 └── Unit/
-    └── CpmCalculatorTest.php         12 casos del algoritmo CPM
+    ├── CpmCalculatorTest.php         12 casos del algoritmo CPM
+    └── ProjectGenerationStageTest.php  Etapas, terminalidad y casts de metadata
 ```
 
 ---
@@ -204,8 +216,13 @@ users ──1:N──> projects ──1:N──> activities ──N:M──> act
 | `deadline` | date, nullable | Fecha deseada, para comparar con lo proyectado |
 | `team_size` | smallint, nullable | Contexto para la IA |
 | `status` | string | Casteado a `ProjectStatus` |
+| `generation_stage` | string, nullable | Casteado a `ProjectGenerationStage`; hito observable actual |
+| `generation_attempt` | unsigned integer | Intento vigente; default `0` |
+| `charged_generation_attempt` | unsigned integer, nullable | Intento que ya consumió crédito |
 | `generation_error` | text, nullable | Mensaje que se le muestra al usuario |
 | `generated_at` | timestamp, nullable | |
+| `generation_started_at` | timestamp, nullable | Inicio del intento vigente |
+| `generation_progressed_at` | timestamp, nullable | Último hito persistido |
 | `total_duration_days` | smallint, nullable | Largo de la ruta crítica, cacheado |
 
 Índices: `(user_id, status)` y `deadline`.
@@ -339,7 +356,7 @@ En `config/services.php`, leyendo del `.env`:
 
 ```
 GEMINI_API_KEY=          # obligatoria en producción
-GEMINI_MODEL=gemini-2.5-flash
+GEMINI_MODEL=gemini-3.1-flash-lite
 GEMINI_BASE_URL=https://generativelanguage.googleapis.com/v1beta
 GEMINI_TIMEOUT=60
 ```
@@ -375,6 +392,7 @@ GEMINI_TIMEOUT=60
 | `Feature/ProjectWizardTest.php` | Los dos pasos, validaciones, encolado del job, cuota agotada, proyecto ajeno |
 | `Feature/ScheduleGenerationTest.php` | Integración completa con `Http::fake()`: malla guardada, dependencias, crédito descontado solo al resultar, API caída, plan circular, regeneración |
 | `Feature/ProjectScreenTest.php` | Renderizado de la malla, selección de actividad, marcar hecha, recálculo del CPM al editar una duración |
+| `Unit/ProjectGenerationStageTest.php` | Valores ordenados de las etapas, etapa terminal y casts/defaults de metadata |
 
 **Cuidado con `Model::shouldBeStrict()`** (activo fuera de producción): detecta *lazy
 loading* y atributos faltantes. Donde un modelo llega por *route model binding* y necesita

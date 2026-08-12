@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\ProjectGenerationStage;
 use App\Enums\ProjectStatus;
 use App\Enums\ProjectType;
 use Database\Factories\ProjectFactory;
@@ -16,6 +17,10 @@ class Project extends Model
 {
     /** @use HasFactory<ProjectFactory> */
     use HasFactory;
+
+    protected $attributes = [
+        'generation_attempt' => 0,
+    ];
 
     protected $fillable = [
         'name',
@@ -35,11 +40,16 @@ class Project extends Model
         return [
             'type' => ProjectType::class,
             'status' => ProjectStatus::class,
+            'generation_stage' => ProjectGenerationStage::class,
             'starts_on' => 'date',
             'deadline' => 'date',
             'generated_at' => 'datetime',
+            'generation_started_at' => 'datetime',
+            'generation_progressed_at' => 'datetime',
             'team_size' => 'integer',
             'total_duration_days' => 'integer',
+            'generation_attempt' => 'integer',
+            'charged_generation_attempt' => 'integer',
         ];
     }
 

@@ -48,7 +48,7 @@ Los mockups de las seis pantallas están en
 Prompt del usuario
       │
       ▼
-PromptBuilder ──► GeminiClient ──► Gemini 2.5 Flash
+PromptBuilder ──► GeminiClient ──► Gemini 3.1 Flash-Lite
       │                                   │
       │            actividades, duraciones, precedentes (JSON)
       ▼                                   │
@@ -86,7 +86,7 @@ la cobertura de pruebas. Ese documento se mantiene al día con cada cambio del p
 
 - PHP 8.4 · Laravel 13
 - MySQL en despliegue, SQLite en desarrollo y pruebas
-- Google Gemini 2.5 Flash (plan gratuito) vía el cliente HTTP de Laravel
+- Google Gemini 3.1 Flash-Lite vía el cliente HTTP de Laravel
 - Blade + Tailwind CSS v4
 - Pest 5 para las pruebas · Pint para el formato
 

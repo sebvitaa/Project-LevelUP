@@ -60,7 +60,8 @@ class GeminiClient
 
         if ($response->failed()) {
             throw PlanGenerationException::apiUnavailable(
-                'la API respondió '.$response->status()
+            'la API respondió '.$response->status().
+            ' — '.$response->json('error.message', $response->body())
             );
         }
 
