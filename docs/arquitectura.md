@@ -240,6 +240,10 @@ Archivos de configuración relevantes para esta unidad: `config/queue.php` defin
 visibilidad de la cola; `.env.example` expone `DB_QUEUE_RETRY_AFTER`; `composer.json` ejecuta el
 worker de desarrollo con timeout finito.
 
+Archivos propios de la Fase 3: `app/Http/Controllers/ProjectClarificationController.php`,
+`app/Http/Requests/StoreProjectClarificationAnswersRequest.php` y
+`resources/views/projects/partials/clarifications-form.blade.php`.
+
 ---
 
 ## 4. Modelo de datos
@@ -345,6 +349,7 @@ Todas en `routes/web.php`. Las URL están en español porque son visibles para e
 | `POST` | `/projects` | `projects.store` | 04 → 05 |
 | `GET` | `/projects/{project}/generando` | `projects.generating` | 05 |
 | `GET` | `/projects/{project}/estado` | `projects.status` | 05 (JSON) |
+| `POST` | `/projects/{project}/clarifications` | `projects.clarifications.store` | 05 (respuestas) |
 | `POST` | `/projects/{project}/regenerar` | `projects.regenerate` | 05 |
 | `GET` | `/projects/{project}/malla` | `projects.show` | 06 |
 | `DELETE` | `/projects/{project}` | `projects.destroy` | 06 |
@@ -424,6 +429,11 @@ por intento; un brief suficiente cambia el estado a `Generating` y encola el job
 que un brief ambiguo persiste las preguntas y cambia a `AwaitingInput`. Un resultado de un intento
 antiguo no puede cambiar el proyecto ni encolar una generación posterior.
 
+La respuesta de aclaraciones exige exactamente todas las preguntas pendientes del intento vigente.
+El controlador vuelve a consultar bajo `lockForUpdate()`, guarda `answer` y `answered_at` y solo
+despacha `GenerateProjectSchedule` con `afterCommit()` cuando la transición a `Generating` quedó
+confirmada.
+
 Las respuestas confirmadas se agregan a `PromptBuilder::userPrompt()` como datos del usuario, en
 una sección separada de las instrucciones de sistema. La regeneración conserva las respuestas
 existentes copiándolas al nuevo intento antes de encolar el plan final.
@@ -484,6 +494,7 @@ La suite se ejecuta con `php artisan test --compact`.
 | `Unit/QueueConfigurationTest.php` | `retry_after` superior al timeout del job de generación |
 | `Feature/ProjectClarificationModelTest.php` | Estados, casts, relación y filtro de preguntas por intento vigente |
 | `Feature/ProjectClarificationFlowTest.php` | Análisis sin cobro, 0 o 1–3 preguntas, transición, intentos antiguos y respuestas en el prompt final |
+| `Feature/ProjectClarificationAnswersTest.php` | Formulario, autorización, respuestas completas, selects e ids ajenos |
 
 **Cuidado con `Model::shouldBeStrict()`** (activo fuera de producción): detecta *lazy
 loading* y atributos faltantes. Donde un modelo llega por *route model binding* y necesita

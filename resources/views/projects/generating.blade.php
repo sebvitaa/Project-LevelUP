@@ -31,6 +31,11 @@
                     </form>
                 </div>
             </div>
+        @elseif ($project->status === \App\Enums\ProjectStatus::AwaitingInput)
+            @include('projects.partials.clarifications-form', [
+                'project' => $project,
+                'clarifications' => $pendingClarifications,
+            ])
         @else
             <div class="flex flex-col items-center gap-2 text-center">
                 <x-logo class="size-12 animate-pulse" />

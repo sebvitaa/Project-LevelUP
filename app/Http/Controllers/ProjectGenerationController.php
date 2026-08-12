@@ -25,7 +25,14 @@ class ProjectGenerationController extends Controller
             return redirect()->route('projects.show', $project);
         }
 
-        return view('projects.generating', ['project' => $project]);
+        $pendingClarifications = $project->status === ProjectStatus::AwaitingInput
+            ? $project->pendingClarifications()->get()
+            : collect();
+
+        return view('projects.generating', [
+            'project' => $project,
+            'pendingClarifications' => $pendingClarifications,
+        ]);
     }
 
     /**

@@ -5,6 +5,7 @@ use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ProjectController;
+use App\Http\Controllers\ProjectClarificationController;
 use App\Http\Controllers\ProjectGenerationController;
 use App\Http\Controllers\ProjectWizardController;
 use Illuminate\Support\Facades\Route;
@@ -54,6 +55,8 @@ Route::middleware('auth')->group(function () {
     // Pantalla 05 — espera con polling
     Route::get('/projects/{project}/generando', [ProjectGenerationController::class, 'show'])->name('projects.generating');
     Route::get('/projects/{project}/estado', [ProjectGenerationController::class, 'status'])->name('projects.status');
+    Route::post('/projects/{project}/clarifications', [ProjectClarificationController::class, 'store'])
+        ->name('projects.clarifications.store');
     Route::post('/projects/{project}/regenerar', [ProjectController::class, 'regenerate'])->name('projects.regenerate');
 
     // Pantalla 06 — malla CPM del proyecto
