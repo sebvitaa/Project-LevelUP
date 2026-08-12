@@ -10,6 +10,7 @@
 
     [$badgeLabel, $badgeClasses, $barClasses] = match (true) {
         $project->status === ProjectStatus::Draft => ['Borrador', 'bg-brand-100 text-brand-600', 'bg-brand-500'],
+        in_array($project->status, [ProjectStatus::Clarifying, ProjectStatus::AwaitingInput], true) => ['Aclarando', 'bg-brand-100 text-brand-600', 'bg-brand-500'],
         $project->status === ProjectStatus::Generating => ['Generando', 'bg-brand-100 text-brand-600', 'bg-brand-500'],
         $project->status === ProjectStatus::Failed => ['Falló', 'bg-critical/10 text-critical', 'bg-critical'],
         $completion === 100 => ['Completado', 'bg-done/10 text-done', 'bg-done'],

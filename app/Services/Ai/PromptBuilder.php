@@ -45,7 +45,7 @@ class PromptBuilder
     /**
      * Mensaje del usuario: su descripción más el contexto del asistente.
      */
-    public function userPrompt(Project $project): string
+    public function userPrompt(Project $project, ?int $generationAttempt = null): string
     {
         $lines = [
             'Nombre del proyecto: '.$project->name,
@@ -59,6 +59,27 @@ class PromptBuilder
 
         if ($project->team_size !== null) {
             $lines[] = 'Tamaño del equipo: '.$project->team_size.' personas';
+        }
+
+        if ($generationAttempt !== null) {
+            $clarifications = $project->relationLoaded('clarifications')
+                ? $project->clarifications
+                    ->where('generation_attempt', $generationAttempt)
+                    ->whereNotNull('answered_at')
+                : $project->clarifications()
+                    ->where('generation_attempt', $generationAttempt)
+                    ->whereNotNull('answered_at')
+                    ->get();
+
+            if ($clarifications->isNotEmpty()) {
+                $lines[] = '';
+                $lines[] = 'Aclaraciones confirmadas:';
+
+                foreach ($clarifications as $clarification) {
+                    $lines[] = '- '.$clarification->question;
+                    $lines[] = '  Respuesta: '.$clarification->answer;
+                }
+            }
         }
 
         $context = implode("\n", $lines);

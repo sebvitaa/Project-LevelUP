@@ -78,6 +78,26 @@ class Project extends Model
     }
 
     /**
+     * @return HasMany<ProjectClarification, $this>
+     */
+    public function clarifications(): HasMany
+    {
+        return $this->hasMany(ProjectClarification::class)->orderBy('round')->orderBy('id');
+    }
+
+    /**
+     * Preguntas sin respuesta del intento vigente.
+     *
+     * @return HasMany<ProjectClarification, $this>
+     */
+    public function pendingClarifications(): HasMany
+    {
+        return $this->clarifications()
+            ->where('generation_attempt', $this->generation_attempt)
+            ->pending();
+    }
+
+    /**
      * Porcentaje de avance: actividades completadas sobre el total.
      */
     public function completionPercentage(): int
@@ -120,6 +140,12 @@ class Project extends Model
     public function isOverdue(): bool
     {
         return ($this->daysBehindSchedule() ?? 0) > 0;
+    }
+
+    public function isCurrentGenerationAttempt(int $attempt): bool
+    {
+        return $this->generation_attempt === $attempt
+            && $this->status === ProjectStatus::Generating;
     }
 
     /**

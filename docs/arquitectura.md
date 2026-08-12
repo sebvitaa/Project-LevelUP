@@ -8,7 +8,7 @@
 
 **Proyecto:** Project LevelUp — IIP323W, Unidad 3 (Laravel)
 **Equipo:** Gabriel Marín (frontend) · Sebastián Ramírez (backend)
-**Última actualización:** 3 de agosto de 2026
+**Última actualización:** 12 de agosto de 2026
 
 ---
 
@@ -32,7 +32,7 @@ El flujo son seis pantallas, diseñadas en
 
 ## 2. Decisiones de arquitectura
 
-Las seis decisiones que explican por qué el código está organizado así.
+Las decisiones que explican por qué el código está organizado así.
 
 ### 2.1 El CPM se calcula en el servidor, no en el prompt
 
@@ -63,7 +63,9 @@ mudo.
 
 ### 2.4 El crédito de IA se descuenta al final, no al principio
 
-`GenerateProjectSchedule` llama a `consumeAiCredit()` recién cuando la generación resultó.
+`GenerateProjectSchedule` cobra dentro de la misma transacción que completa el proyecto. La
+transacción bloquea el proyecto y el usuario, verifica saldo, marca `charged_generation_attempt`
+y aumenta `ai_credits_used`; una repetición del mismo intento no puede cobrar dos veces.
 
 **Por qué:** si la API de Google se cae o devuelve basura, el error no es del usuario y no
 tiene por qué costarle una de sus 20 consultas mensuales.
@@ -84,6 +86,35 @@ el porcentaje y las transiciones se implementarán en las unidades siguientes.
 **Por qué:** el polling necesita distinguir un trabajo activo, un intento antiguo y un proceso
 estancado sin inventar progreso basado en tiempo ni duplicar el estado en otra tabla.
 
+### 2.7 Cada generación se protege por proyecto e intento
+
+`GenerateProjectSchedule` recibe el identificador del proyecto y el `generation_attempt` que lo
+originó. Implementa unicidad por proyecto, abandona sin efectos los jobs antiguos y solo marca
+fallos si el intento sigue vigente. La creación y la regeneración actualizan el intento dentro de
+una transacción y despachan el job con `afterCommit()`; la persistencia de la malla vuelve a
+bloquear el proyecto antes de reemplazar sus actividades.
+
+**Por qué:** un reintento, doble submit o worker duplicado no debe sobrescribir una generación más
+nueva ni dejar un proyecto listo en estado fallido.
+
+---
+
+### 2.8 Las aclaraciones pertenecen a un proyecto y a un intento
+
+Las preguntas que la IA necesite hacer se persisten en `project_clarifications`, relacionadas
+con el proyecto y numeradas por `generation_attempt` y `round`. La clave `key` identifica cada
+pregunta dentro de una ronda; `answer` y `answered_at` distinguen una pregunta pendiente de una
+ya respondida.
+
+**Por qué:** las preguntas de un intento descartado no deben mezclarse con las del intento
+vigente. La unicidad `(project_id, generation_attempt, round, key)` también evita duplicar la
+misma pregunta al reintentar una operación.
+
+El análisis usa una sola ronda de entre 1 y 3 preguntas. Si no hace falta aclarar, el proyecto
+transita directamente de `Clarifying`/`analyzing_brief` a `Generating`/`requesting_plan`; si hace
+falta, queda en `AwaitingInput`/`awaiting_answers`. Ninguna llamada de análisis consume crédito:
+solo se cobra cuando la malla final llega a `Ready`.
+
 ---
 
 ## 3. Estructura de carpetas
@@ -94,7 +125,7 @@ esqueleto estándar de Laravel sin modificar.
 ```
 app/
 ├── Enums/
-│   ├── ProjectStatus.php          Draft · Generating · Ready · Failed
+│   ├── ProjectStatus.php          Draft · Clarifying · AwaitingInput · Generating · Ready · Failed
 │   ├── ProjectType.php            6 tipos + su contexto de dominio para el prompt
 │   └── ProjectGenerationStage.php  Hitos observables de la generación
 ├── Exceptions/
@@ -117,10 +148,12 @@ app/
 │       ├── StoreProjectRequest.php
 │       └── UpdateActivityRequest.php
 ├── Jobs/
+│   ├── GenerateProjectClarifications.php Job en cola: análisis del brief
 │   └── GenerateProjectSchedule.php   Job en cola: IA → CPM → persistencia
 ├── Models/
 │   ├── Activity.php                  Nodo de la malla
-│   ├── Project.php                   Proyecto y sus métricas de avance
+│   ├── Project.php                   Proyecto, malla, estado y aclaraciones
+│   ├── ProjectClarification.php      Pregunta persistida para precisar el brief
 │   └── User.php                      + relación projects() y cuota de IA
 ├── Policies/
 │   └── ProjectPolicy.php             Un proyecto solo lo ve y lo toca su dueño
@@ -129,6 +162,8 @@ app/
 └── Services/
     ├── Ai/
     │   ├── GeminiClient.php          Cliente HTTP delgado de la API de Google
+    │   ├── ClarificationPromptBuilder.php Prompt estructurado de aclaraciones
+    │   ├── ProjectClarificationGenerator.php Valida y persiste preguntas
     │   ├── ProjectPlanGenerator.php  Orquesta prompt → validación → CPM → guardado
     │   └── PromptBuilder.php         Arma system prompt, user prompt y responseSchema
     └── Cpm/
@@ -138,14 +173,16 @@ app/
 database/
 ├── factories/
 │   ├── ActivityFactory.php           + estados critical() y completed()
-│   ├── ProjectFactory.php            + estados draft() generating() ready() failed()
+│   ├── ProjectFactory.php            + estados draft() clarifying() awaitingInput() generating() ready() failed()
+│   ├── ProjectClarificationFactory.php Estados pending(), answered() y select()
 │   └── UserFactory.php               + estado withoutAiCredits()
 ├── migrations/
 │   ├── 2026_08_03_195333_create_projects_table.php
 │   ├── 2026_08_03_195334_create_activities_table.php
 │   ├── 2026_08_03_195335_create_activity_dependencies_table.php
 │   ├── 2026_08_03_195336_add_ai_credits_to_users_table.php
-│   └── 2026_08_11_000000_add_generation_metadata_to_projects_table.php
+│   ├── 2026_08_11_000000_add_generation_metadata_to_projects_table.php
+│   └── 2026_08_12_000000_create_project_clarifications_table.php
 └── seeders/
     ├── DatabaseSeeder.php
     └── DemoProjectSeeder.php         Proyecto demo con la malla de los mockups
@@ -189,11 +226,19 @@ tests/
 │   ├── ExampleTest.php               Redirección de la raíz
 │   ├── ProjectScreenTest.php         Humo sobre la malla + recálculo al editar
 │   ├── ProjectWizardTest.php         Asistente, validación y autorización
+│   ├── ProjectClarificationFlowTest.php Análisis, transición, validación y prompt final
+│   ├── ProjectClarificationModelTest.php Estados, casts, relación y filtro por intento vigente
 │   └── ScheduleGenerationTest.php    Integración con Gemini vía Http::fake()
 └── Unit/
     ├── CpmCalculatorTest.php         12 casos del algoritmo CPM
-    └── ProjectGenerationStageTest.php  Etapas, terminalidad y casts de metadata
+    ├── ProjectGenerationStageTest.php  Etapas, terminalidad y casts de metadata
+    ├── ProjectStatusTest.php           Estados conversacionales y terminalidad
+    └── QueueConfigurationTest.php      Retry de cola superior al timeout del job
 ```
+
+Archivos de configuración relevantes para esta unidad: `config/queue.php` define los tiempos de
+visibilidad de la cola; `.env.example` expone `DB_QUEUE_RETRY_AFTER`; `composer.json` ejecuta el
+worker de desarrollo con timeout finito.
 
 ---
 
@@ -226,6 +271,27 @@ users ──1:N──> projects ──1:N──> activities ──N:M──> act
 | `total_duration_days` | smallint, nullable | Largo de la ruta crítica, cacheado |
 
 Índices: `(user_id, status)` y `deadline`.
+
+### `project_clarifications`
+
+Preguntas que la IA genera para precisar el brief antes de construir la malla.
+
+| Columna | Tipo | Notas |
+|---|---|---|
+| `project_id` | FK → projects | En cascada al borrar |
+| `round` | tinyint | Ronda conversacional, default `1` |
+| `generation_attempt` | unsigned integer | Intento al que pertenece la pregunta |
+| `key` | string(64) | Identificador estable dentro de la ronda |
+| `question` | text | Texto mostrado al usuario |
+| `rationale` | text, nullable | Motivo de la aclaración |
+| `input_type` | string | Tipo de control esperado, default `text` |
+| `options` | JSON, nullable | Opciones para controles cerrados |
+| `answer` | text, nullable | Respuesta del usuario |
+| `answered_at` | timestamp, nullable | Momento en que se respondió |
+
+Restricciones: único `(project_id, generation_attempt, round, key)` e índice
+`(project_id, generation_attempt, answered_at)`. `Project::pendingClarifications()` filtra las
+preguntas sin respuesta del intento vigente.
 
 ### `activities`
 
@@ -332,7 +398,7 @@ Sirve como caso de verificación a ojo:
 
 ## 7. Integración con Gemini
 
-Tres clases con una responsabilidad cada una:
+Clases con una responsabilidad cada una:
 
 - **`PromptBuilder`** arma el *system prompt* (rol, reglas, contexto según
   `ProjectType::domainHint()`), el *user prompt* (descripción + fechas + equipo) y el
@@ -342,6 +408,9 @@ Tres clases con una responsabilidad cada una:
   en los tests con `Http::fake()`.
 - **`ProjectPlanGenerator`** valida la forma de la respuesta, llama al `CpmCalculator` y
   guarda todo en una transacción.
+- **`ClarificationPromptBuilder`** y **`ProjectClarificationGenerator`** hacen la primera
+  llamada estructurada: validan una decisión consistente con 0 o 1–3 preguntas y persisten la
+  ronda si el brief necesita información adicional.
 
 Se usa **respuesta estructurada** (`responseMimeType: application/json` +
 `responseSchema`) para no tener que parsear texto libre, con `temperature: 0.2` para que
@@ -349,6 +418,24 @@ la salida sea lo más estable posible.
 
 Regenerar **reemplaza** la malla completa: borrar y volver a crear, no mezclar. Mezclar
 dos grafos distintos daría dependencias inconsistentes.
+
+La creación comienza en `Clarifying`. `GenerateProjectClarifications` es único por proyecto y
+por intento; un brief suficiente cambia el estado a `Generating` y encola el job final, mientras
+que un brief ambiguo persiste las preguntas y cambia a `AwaitingInput`. Un resultado de un intento
+antiguo no puede cambiar el proyecto ni encolar una generación posterior.
+
+Las respuestas confirmadas se agregan a `PromptBuilder::userPrompt()` como datos del usuario, en
+una sección separada de las instrucciones de sistema. La regeneración conserva las respuestas
+existentes copiándolas al nuevo intento antes de encolar el plan final.
+
+El job final recibe `project_id` e `generation_attempt` como escalares y es único por proyecto.
+Antes de llamar a Gemini, antes de persistir y al manejar un fallo verifica que el intento y el
+estado sigan vigentes. La escritura de actividades toma un lock del proyecto dentro de la
+transacción; por eso un job antiguo abandona sin reemplazar una malla posterior.
+
+El job mantiene timeout de 120 segundos y las conexiones de cola usan `retry_after` de 180
+segundos por defecto. En desarrollo, `composer run dev` inicia `queue:listen` con timeout finito
+de 120 segundos; `retry_after` debe permanecer por encima de ese límite.
 
 ### Configuración
 
@@ -382,23 +469,30 @@ GEMINI_TIMEOUT=60
 
 ## 9. Pruebas
 
-46 pruebas, 126 aserciones. `php artisan test --compact`.
+La suite se ejecuta con `php artisan test --compact`.
 
 | Archivo | Qué cubre |
 |---|---|
 | `Unit/CpmCalculatorTest.php` | Ambas pasadas, holguras, ruta crítica, layout, ramas paralelas, y los tres errores del grafo (ciclo, precedente inexistente, código repetido) |
 | `Feature/AuthenticationTest.php` | Login correcto e incorrecto, registro, logout, rutas protegidas |
 | `Feature/DashboardTest.php` | Aislamiento por usuario, cálculo del % de avance, estado vacío |
-| `Feature/ProjectWizardTest.php` | Los dos pasos, validaciones, encolado del job, cuota agotada, proyecto ajeno |
-| `Feature/ScheduleGenerationTest.php` | Integración completa con `Http::fake()`: malla guardada, dependencias, crédito descontado solo al resultar, API caída, plan circular, regeneración |
+| `Feature/ProjectWizardTest.php` | Los dos pasos, validaciones, encolado con intento, regeneración desde fallo, regeneración activa y autorización |
+| `Feature/ScheduleGenerationTest.php` | Integración completa con `Http::fake()`: malla guardada, dependencias, cobro único y atómico, API caída, plan circular, regeneración y jobs antiguos |
 | `Feature/ProjectScreenTest.php` | Renderizado de la malla, selección de actividad, marcar hecha, recálculo del CPM al editar una duración |
 | `Unit/ProjectGenerationStageTest.php` | Valores ordenados de las etapas, etapa terminal y casts/defaults de metadata |
+| `Unit/ProjectStatusTest.php` | Estados conversacionales, detección de respuestas pendientes y terminalidad |
+| `Unit/QueueConfigurationTest.php` | `retry_after` superior al timeout del job de generación |
+| `Feature/ProjectClarificationModelTest.php` | Estados, casts, relación y filtro de preguntas por intento vigente |
+| `Feature/ProjectClarificationFlowTest.php` | Análisis sin cobro, 0 o 1–3 preguntas, transición, intentos antiguos y respuestas en el prompt final |
 
 **Cuidado con `Model::shouldBeStrict()`** (activo fuera de producción): detecta *lazy
 loading* y atributos faltantes. Donde un modelo llega por *route model binding* y necesita
 una relación, hay que pedirla explícitamente con `loadMissing()`.
 
 ---
+
+Las pruebas de generación también cubren jobs de intentos antiguos, fallos obsoletos,
+persistencia cancelada cuando cambia el intento, unicidad por proyecto y regeneración duplicada.
 
 ## 10. Puesta en marcha
 

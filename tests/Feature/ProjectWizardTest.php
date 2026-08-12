@@ -2,7 +2,7 @@
 
 use App\Enums\ProjectStatus;
 use App\Enums\ProjectType;
-use App\Jobs\GenerateProjectSchedule;
+use App\Jobs\GenerateProjectClarifications;
 use App\Models\Project;
 use App\Models\User;
 use Illuminate\Support\Facades\Queue;
@@ -49,10 +49,15 @@ it('crea el proyecto y encola la generación', function () {
     $project = Project::sole();
 
     expect($project->name)->toBe('App Banca Móvil')
-        ->and($project->status)->toBe(ProjectStatus::Generating)
+        ->and($project->status)->toBe(ProjectStatus::Clarifying)
+        ->and($project->generation_attempt)->toBe(1)
+        ->and($project->generation_stage)->toBe(\App\Enums\ProjectGenerationStage::AnalyzingBrief)
         ->and($project->user_id)->toBe($this->user->id);
 
-    Queue::assertPushed(GenerateProjectSchedule::class);
+    Queue::assertPushed(GenerateProjectClarifications::class, function (GenerateProjectClarifications $job) use ($project): bool {
+        return $job->projectId === $project->getKey()
+            && $job->generationAttempt === 1;
+    });
 });
 
 it('exige una descripción con contenido suficiente', function () {
@@ -101,4 +106,40 @@ it('impide ver la malla de un proyecto ajeno', function () {
     $this->actingAs($this->user)
         ->get(route('projects.show', $theirs))
         ->assertForbidden();
+});
+
+it('incrementa el intento y encola una regeneracion solo desde un fallo', function () {
+    Queue::fake();
+
+    $project = Project::factory()
+        ->failed()
+        ->for($this->user)
+        ->create(['generation_attempt' => 1]);
+
+    $this->actingAs($this->user)
+        ->post(route('projects.regenerate', $project))
+        ->assertRedirect(route('projects.generating', $project));
+
+    expect($project->refresh()->status)->toBe(ProjectStatus::Clarifying)
+        ->and($project->generation_attempt)->toBe(2)
+        ->and($project->generation_stage)->toBe(\App\Enums\ProjectGenerationStage::AnalyzingBrief);
+
+    Queue::assertPushed(GenerateProjectClarifications::class, function (GenerateProjectClarifications $job) use ($project): bool {
+        return $job->projectId === $project->getKey()
+            && $job->generationAttempt === 2;
+    });
+});
+
+it('no crea otro intento ni job al regenerar mientras esta generando', function () {
+    Queue::fake();
+
+    $project = Project::factory()->generating()->for($this->user)->create();
+
+    $this->actingAs($this->user)
+        ->post(route('projects.regenerate', $project))
+        ->assertRedirect(route('projects.generating', $project));
+
+    expect($project->refresh()->generation_attempt)->toBe(1);
+
+    Queue::assertNothingPushed();
 });

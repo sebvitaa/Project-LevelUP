@@ -21,6 +21,11 @@ class PlanGenerationException extends Exception
         return new self("La IA devolvió un plan que no pudimos leer: {$reason}. Prueba describiendo el proyecto con más detalle.");
     }
 
+    public static function invalidClarificationResponse(string $reason): self
+    {
+        return new self("La IA devolvió aclaraciones que no pudimos leer: {$reason}. Prueba describiendo el proyecto con más detalle.");
+    }
+
     public static function invalidGraph(string $reason): self
     {
         return new self("El plan generado no forma una malla válida: {$reason}. Vuelve a generarlo o ajusta la descripción.");

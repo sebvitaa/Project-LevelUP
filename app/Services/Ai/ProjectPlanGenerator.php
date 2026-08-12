@@ -2,9 +2,11 @@
 
 namespace App\Services\Ai;
 
+use App\Enums\ProjectGenerationStage;
 use App\Enums\ProjectStatus;
 use App\Exceptions\PlanGenerationException;
 use App\Models\Project;
+use App\Models\User;
 use App\Services\Cpm\CpmCalculator;
 use App\Services\Cpm\ScheduledActivity;
 use Illuminate\Support\Facades\DB;
@@ -25,17 +27,25 @@ class ProjectPlanGenerator
     ) {}
 
     /**
+     * @return bool Whether the plan was persisted for the current attempt.
+     *
      * @throws PlanGenerationException
      */
-    public function generate(Project $project): void
+    public function generate(Project $project, int $generationAttempt): bool
     {
+        $project->load([
+            'clarifications' => fn ($query) => $query
+                ->where('generation_attempt', $generationAttempt)
+                ->whereNotNull('answered_at'),
+        ]);
+
         $payload = $this->client->generateJson(
             $this->prompts->systemInstruction($project),
-            $this->prompts->userPrompt($project),
+            $this->prompts->userPrompt($project, $generationAttempt),
             $this->prompts->responseSchema(),
         );
 
-        $activities = $this->validatePlan($payload);
+        $activities = $this->validatePlan($payload, $project);
 
         try {
             $schedule = $this->cpm->calculate(array_map(
@@ -50,7 +60,7 @@ class ProjectPlanGenerator
             throw PlanGenerationException::invalidGraph($e->getMessage());
         }
 
-        $this->persist($project, $activities, $schedule);
+        return $this->persist($project, $activities, $schedule, $generationAttempt);
     }
 
     /**
@@ -61,7 +71,7 @@ class ProjectPlanGenerator
      *
      * @throws PlanGenerationException
      */
-    private function validatePlan(array $payload): array
+    private function validatePlan(array $payload, Project $project): array
     {
         $activities = $payload['activities'] ?? null;
 
@@ -69,35 +79,62 @@ class ProjectPlanGenerator
             throw PlanGenerationException::invalidResponse('no vino ninguna actividad');
         }
 
+        [$minimum, $maximum] = $project->type->activityRange();
+
+        if (count($activities) < $minimum || count($activities) > $maximum) {
+            throw PlanGenerationException::invalidResponse(
+                "la malla debe tener entre {$minimum} y {$maximum} actividades"
+            );
+        }
+
         $clean = [];
+        $codes = [];
 
         foreach ($activities as $activity) {
             if (! is_array($activity)) {
                 throw PlanGenerationException::invalidResponse('una actividad no es un objeto');
             }
 
-            foreach (['code', 'name', 'duration_days'] as $key) {
-                if (! isset($activity[$key])) {
-                    throw PlanGenerationException::invalidResponse("a una actividad le falta el campo [{$key}]");
-                }
+            $code = $activity['code'] ?? null;
+            $name = $activity['name'] ?? null;
+            $description = $activity['description'] ?? '';
+            $duration = $activity['duration_days'] ?? null;
+            $predecessors = $activity['predecessors'] ?? [];
+
+            if (! is_string($code) || ! preg_match('/^[A-Z][A-Z0-9]{0,3}$/', $code) || isset($codes[$code])) {
+                throw PlanGenerationException::invalidResponse('hay un código inválido o repetido');
             }
 
-            $duration = (int) $activity['duration_days'];
+            if (! is_string($name) || trim($name) === '' || mb_strlen($name) > 255) {
+                throw PlanGenerationException::invalidResponse('hay un nombre vacío o demasiado largo');
+            }
 
-            if ($duration < 1) {
+            if (! is_string($description) || mb_strlen($description) > 10000) {
+                throw PlanGenerationException::invalidResponse('hay una descripción demasiado larga');
+            }
+
+            if (! is_int($duration) || $duration < 1 || $duration > 65535) {
                 throw PlanGenerationException::invalidResponse(
-                    "la actividad [{$activity['code']}] tiene una duración inválida"
+                    "la actividad [{$code}] tiene una duración inválida"
                 );
             }
 
-            $predecessors = $activity['predecessors'] ?? [];
+            if (! is_array($predecessors) || count(array_filter(
+                $predecessors,
+                static fn (mixed $predecessor): bool => ! is_string($predecessor)
+            )) > 0) {
+                throw PlanGenerationException::invalidResponse(
+                    "la actividad [{$code}] tiene precedentes inválidos"
+                );
+            }
 
+            $codes[$code] = true;
             $clean[] = [
-                'code' => (string) $activity['code'],
-                'name' => (string) $activity['name'],
-                'description' => (string) ($activity['description'] ?? ''),
+                'code' => $code,
+                'name' => trim($name),
+                'description' => trim($description),
                 'duration_days' => $duration,
-                'predecessors' => is_array($predecessors) ? array_map(strval(...), $predecessors) : [],
+                'predecessors' => array_values($predecessors),
             ];
         }
 
@@ -113,15 +150,37 @@ class ProjectPlanGenerator
      * @param  array<int, array{code: string, name: string, description: string, duration_days: int, predecessors: array<int, string>}>  $activities
      * @param  array<string, ScheduledActivity>  $schedule
      */
-    private function persist(Project $project, array $activities, array $schedule): void
+    private function persist(Project $project, array $activities, array $schedule, int $generationAttempt): bool
     {
-        DB::transaction(function () use ($project, $activities, $schedule): void {
-            $project->activities()->delete();
+        return DB::transaction(function () use ($project, $activities, $schedule, $generationAttempt): bool {
+            $lockedProject = Project::query()
+                ->whereKey($project->getKey())
+                ->lockForUpdate()
+                ->first();
+
+            if ($lockedProject === null || ! $lockedProject->isCurrentGenerationAttempt($generationAttempt)) {
+                return false;
+            }
+
+            if ($lockedProject->charged_generation_attempt === $generationAttempt) {
+                return false;
+            }
+
+            $lockedUser = User::query()
+                ->whereKey($lockedProject->user_id)
+                ->lockForUpdate()
+                ->first();
+
+            if ($lockedUser === null || ! $lockedUser->hasAiCreditsAvailable()) {
+                throw PlanGenerationException::noCreditsLeft();
+            }
+
+            $lockedProject->activities()->delete();
 
             $models = [];
 
             foreach ($activities as $activity) {
-                $models[$activity['code']] = $project->activities()->forceCreate([
+                $models[$activity['code']] = $lockedProject->activities()->forceCreate([
                     'code' => $activity['code'],
                     'name' => $activity['name'],
                     'description' => $activity['description'],
@@ -139,12 +198,18 @@ class ProjectPlanGenerator
                 $models[$activity['code']]->predecessors()->sync($predecessorIds);
             }
 
-            $project->forceFill([
+            $lockedProject->forceFill([
                 'status' => ProjectStatus::Ready,
+                'generation_stage' => ProjectGenerationStage::Complete,
+                'charged_generation_attempt' => $generationAttempt,
                 'total_duration_days' => $this->cpm->totalDuration($schedule),
                 'generation_error' => null,
                 'generated_at' => now(),
             ])->save();
+
+            $lockedUser->consumeAiCredit();
+
+            return true;
         });
     }
 }

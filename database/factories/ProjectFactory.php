@@ -66,6 +66,32 @@ class ProjectFactory extends Factory
         ]);
     }
 
+    /** La IA estÃ¡ evaluando si el brief necesita aclaraciones. */
+    public function clarifying(): static
+    {
+        return $this->state(fn (): array => [
+            'status' => ProjectStatus::Clarifying,
+            'generation_stage' => ProjectGenerationStage::AnalyzingBrief,
+            'generation_attempt' => 1,
+            'generation_started_at' => now(),
+            'generation_progressed_at' => now(),
+            'generation_error' => null,
+        ]);
+    }
+
+    /** Hay preguntas persistidas que esperan respuesta del usuario. */
+    public function awaitingInput(): static
+    {
+        return $this->state(fn (): array => [
+            'status' => ProjectStatus::AwaitingInput,
+            'generation_stage' => ProjectGenerationStage::AwaitingAnswers,
+            'generation_attempt' => 1,
+            'generation_started_at' => now(),
+            'generation_progressed_at' => now(),
+            'generation_error' => null,
+        ]);
+    }
+
     /** Malla generada y CPM resuelto. */
     public function ready(int $totalDurationDays = 39): static
     {

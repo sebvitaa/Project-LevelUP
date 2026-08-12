@@ -2,12 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\ProjectGenerationStage;
 use App\Enums\ProjectStatus;
 use App\Http\Requests\StoreProjectRequest;
+use App\Jobs\GenerateProjectClarifications;
 use App\Jobs\GenerateProjectSchedule;
 use App\Models\Project;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 class ProjectController extends Controller
@@ -17,14 +20,26 @@ class ProjectController extends Controller
      */
     public function store(StoreProjectRequest $request): RedirectResponse
     {
-        $project = $request->user()->projects()->create([
-            ...$request->validated(),
-            'status' => ProjectStatus::Generating,
-        ]);
+        $project = DB::transaction(function () use ($request): Project {
+            $project = $request->user()->projects()->create([
+                ...$request->validated(),
+                'status' => ProjectStatus::Clarifying,
+            ]);
+
+            $project->forceFill([
+                'generation_stage' => ProjectGenerationStage::AnalyzingBrief,
+                'generation_attempt' => 1,
+                'generation_started_at' => now(),
+                'generation_progressed_at' => now(),
+            ])->save();
+
+            GenerateProjectClarifications::dispatch($project->getKey(), $project->generation_attempt)
+                ->afterCommit();
+
+            return $project;
+        });
 
         $request->session()->forget('project_wizard.type');
-
-        GenerateProjectSchedule::dispatch($project);
 
         return redirect()->route('projects.generating', $project);
     }
@@ -64,12 +79,63 @@ class ProjectController extends Controller
     {
         $this->authorize('update', $project);
 
-        $project->forceFill([
-            'status' => ProjectStatus::Generating,
-            'generation_error' => null,
-        ])->save();
+        DB::transaction(function () use ($project): void {
+            $lockedProject = Project::query()
+                ->whereKey($project->getKey())
+                ->lockForUpdate()
+                ->firstOrFail();
 
-        GenerateProjectSchedule::dispatch($project);
+            if ($lockedProject->status !== ProjectStatus::Failed) {
+                return;
+            }
+
+            $attempt = $lockedProject->generation_attempt + 1;
+            $answeredClarifications = $lockedProject->clarifications()
+                ->where('generation_attempt', $lockedProject->generation_attempt)
+                ->whereNotNull('answered_at')
+                ->get();
+
+            $hasAnswers = $answeredClarifications->isNotEmpty();
+
+            $lockedProject->forceFill([
+                'status' => $hasAnswers ? ProjectStatus::Generating : ProjectStatus::Clarifying,
+                'generation_stage' => $hasAnswers
+                    ? ProjectGenerationStage::RequestingPlan
+                    : ProjectGenerationStage::AnalyzingBrief,
+                'generation_attempt' => $attempt,
+                'generation_error' => null,
+                'generation_started_at' => now(),
+                'generation_progressed_at' => now(),
+            ])->save();
+
+            if ($hasAnswers) {
+                $lockedProject->clarifications()->createMany($answeredClarifications->map(
+                    fn ($clarification): array => [
+                        'round' => $clarification->round,
+                        'generation_attempt' => $attempt,
+                        'key' => $clarification->key,
+                        'question' => $clarification->question,
+                        'rationale' => $clarification->rationale,
+                        'input_type' => $clarification->input_type,
+                        'options' => $clarification->options,
+                        'answer' => $clarification->answer,
+                        'answered_at' => $clarification->answered_at,
+                    ],
+                )->all());
+
+                GenerateProjectSchedule::dispatch($lockedProject->getKey(), $attempt)
+                    ->afterCommit();
+            } else {
+                GenerateProjectClarifications::dispatch($lockedProject->getKey(), $attempt)
+                    ->afterCommit();
+            }
+        });
+
+        $project->refresh();
+
+        if ($project->status === ProjectStatus::Ready) {
+            return redirect()->route('projects.show', $project);
+        }
 
         return redirect()->route('projects.generating', $project);
     }
