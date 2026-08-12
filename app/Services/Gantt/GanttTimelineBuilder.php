@@ -28,6 +28,11 @@ class GanttTimelineBuilder
             : $calculatedLast;
         $days = $start->diffInDays($last) + 1;
         $scale = $this->scaleFor($days);
+        $dayWidth = match ($scale) {
+            'day' => 40,
+            'week' => 16,
+            default => 5,
+        };
 
         $rows = $activities
             ->sortBy(fn (Activity $activity): array => [
@@ -41,6 +46,7 @@ class GanttTimelineBuilder
                 $duration = (int) $activity->duration_days;
                 $activityStart = $start->copy()->addDays($offset);
                 $activityFinish = $activityStart->copy()->addDays($duration - 1);
+                $isCompleted = $activity->isCompleted();
                 $predecessors = $activity->relationLoaded('predecessors')
                     ? $activity->predecessors->pluck('code')->values()->all()
                     : [];
@@ -58,7 +64,8 @@ class GanttTimelineBuilder
                     'offset' => $offset,
                     'duration' => $duration,
                     'is_critical' => (bool) $activity->is_critical,
-                    'is_completed' => $activity->isCompleted(),
+                    'is_completed' => $isCompleted,
+                    'is_overdue' => ! $isCompleted && $activityFinish->isBefore(Carbon::now()->startOfDay()),
                     'predecessors' => $predecessors,
                     'project_id' => $project->getKey(),
                 ];
@@ -71,6 +78,7 @@ class GanttTimelineBuilder
             'total_days' => $days,
             'calculated_duration_days' => $calculatedDays,
             'scale' => $scale,
+            'timeline_width' => max(720, $days * $dayWidth),
             'months' => $this->groupsByMonth($start, $days),
             'columns' => $this->columns($start, $days, $scale),
             'weekend_ranges' => $this->weekendRanges($start, $days),

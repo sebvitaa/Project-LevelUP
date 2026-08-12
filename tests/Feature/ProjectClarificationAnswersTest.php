@@ -35,6 +35,8 @@ it('muestra las preguntas al dueño del proyecto', function () {
         ->assertSee('¿Qué plataforma es prioritaria?')
         ->assertSee('<textarea', false)
         ->assertSee('type="radio"', false)
+        ->assertSee('min-h-full', false)
+        ->assertSee('justify-start', false)
         ->assertSee('Continuar con la generación');
 });
 

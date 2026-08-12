@@ -10,6 +10,10 @@ function mountGenerationWatcher() {
     const url = watcher.dataset.statusUrl;
     window.sessionStorage.removeItem(`levelup-awaiting-input:${url}`);
     const liveStatus = document.getElementById('generation-live-status');
+    const progressMessage = document.getElementById('generation-progress-message');
+    const progressBar = document.getElementById('generation-progressbar');
+    const progressFill = document.getElementById('generation-progress-fill');
+    const progressSteps = [...watcher.querySelectorAll('[data-generation-step]')];
     let timer = null;
     let controller = null;
     let inFlight = false;
@@ -18,6 +22,42 @@ function mountGenerationWatcher() {
 
     const announce = (message) => {
         if (liveStatus) liveStatus.textContent = message;
+    };
+    const renderProgress = (state) => {
+        const message = state.message ?? '';
+        const stepCount = Math.max(1, Number(state.step_count) || progressSteps.length || 5);
+        const rawStep = state.step_index === null || state.step_index === undefined
+            ? 0
+            : Number(state.step_index);
+        const stepIndex = Math.max(0, Math.min(stepCount, Number.isFinite(rawStep) ? rawStep : 0));
+        const percentage = `${(stepIndex / stepCount) * 100}%`;
+
+        if (progressMessage) progressMessage.textContent = message;
+        if (progressBar) {
+            progressBar.setAttribute('aria-valuemax', String(stepCount));
+            progressBar.setAttribute('aria-valuenow', String(stepIndex));
+            progressBar.setAttribute('aria-valuetext', message);
+        }
+        if (progressFill) progressFill.style.width = percentage;
+
+        progressSteps.forEach((step) => {
+            const stepNumber = Number(step.dataset.generationStep);
+            const isCurrent = stepNumber === stepIndex;
+            const isComplete = stepNumber <= stepIndex && stepIndex > 0;
+            const dot = step.querySelector('[data-generation-step-dot]');
+
+            step.classList.toggle('font-semibold', isCurrent);
+            step.classList.toggle('text-brand-600', isCurrent);
+            step.classList.toggle('text-ink-500', !isCurrent);
+            step.toggleAttribute('aria-current', isCurrent);
+            if (isCurrent) step.setAttribute('aria-current', 'step');
+
+            if (dot) {
+                dot.classList.toggle('border-brand-500', isComplete);
+                dot.classList.toggle('bg-brand-500', isComplete);
+                dot.classList.toggle('border-ink-300', !isComplete);
+            }
+        });
     };
     const clearTimer = () => {
         if (timer !== null) {
@@ -67,6 +107,7 @@ function mountGenerationWatcher() {
             failures = 0;
             watcher.dataset.stage = state.stage ?? '';
             watcher.dataset.stepIndex = state.step_index ?? '';
+            renderProgress(state);
             if (state.message) announce(state.message);
 
             if (state.redirect_to) {

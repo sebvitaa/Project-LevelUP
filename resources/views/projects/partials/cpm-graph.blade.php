@@ -4,10 +4,10 @@
      * calculó: la columna es la profundidad en el grafo y la fila ordena por
      * holgura, así la ruta crítica queda como una línea horizontal arriba.
      */
-    $nodeWidth = 168;
-    $nodeHeight = 84;
-    $gapX = 56;
-    $gapY = 32;
+    $nodeWidth = 220;
+    $nodeHeight = 104;
+    $gapX = 64;
+    $gapY = 40;
 
     $position = fn (int $column, int $row): array => [
         'x' => $column * ($nodeWidth + $gapX),
@@ -69,20 +69,25 @@
 
         <a id="activity-{{ $activity->code }}" data-activity-code="{{ $activity->code }}" href="{{ route('projects.show', ['project' => $project, 'activity' => $activity->code, 'view' => $view ?? 'network']) }}"
            @class([
-               'absolute flex flex-col justify-between rounded-xl border-[1.5px] bg-white p-2.5 shadow-sm',
-               'border-critical ring-3 ring-critical/10' => $activity->is_critical && ! $activity->isCompleted(),
-               'border-ink-300' => ! $activity->is_critical && ! $activity->isCompleted(),
+               'absolute flex flex-col justify-between rounded-xl border-[1.5px] p-2.5 shadow-sm',
+               'bg-white' => ! $activity->isCompleted() && ! $activity->isOverdue(),
+               'border-critical ring-3 ring-critical/10' => ($activity->is_critical || $activity->isOverdue()) && ! $activity->isCompleted(),
+               'border-ink-300' => ! $activity->is_critical && ! $activity->isOverdue() && ! $activity->isCompleted(),
                'ring-3 ring-brand-100 border-brand-500' => $selected?->is($activity),
-               'border-done bg-done/10' => $activity->isCompleted(),
+               'border-done bg-done-soft' => $activity->isCompleted(),
+               'bg-critical-soft' => $activity->isOverdue() && ! $activity->isCompleted(),
            ])
            @if ($selected?->is($activity)) aria-current="true" @endif
            data-completed="{{ $activity->isCompleted() ? 'true' : 'false' }}"
+           data-overdue="{{ $activity->isOverdue() ? 'true' : 'false' }}"
            style="left: {{ $point['x'] }}px; top: {{ $point['y'] }}px; width: {{ $nodeWidth }}px; height: {{ $nodeHeight }}px;">
 
             <div class="flex items-center justify-between">
                 <span class="num text-[10px] font-semibold text-ink-500">{{ $activity->code }}</span>
                 @if ($activity->isCompleted())
                     <span class="text-[10px] font-bold text-done">✓ Hecha</span>
+                @elseif ($activity->isOverdue())
+                    <span class="text-[10px] font-bold text-critical">Atrasada</span>
                 @endif
                 <span @class([
                     'num text-[11px] font-semibold',
@@ -91,7 +96,7 @@
                 ])>{{ $activity->duration_days }} d</span>
             </div>
 
-            <p class="line-clamp-2 text-xs font-semibold leading-tight tracking-tight">{{ $activity->name }}</p>
+            <p class="line-clamp-3 text-xs font-semibold leading-tight tracking-tight">{{ $activity->name }}</p>
 
             <div class="flex items-center justify-between">
                 <span class="num flex gap-1.5 text-[10px] text-ink-500">
@@ -100,10 +105,10 @@
                 </span>
                 <span @class([
                     'rounded-full px-1.5 py-0.5 text-[9px] font-semibold',
-                    'bg-critical/10 text-critical' => $activity->is_critical,
-                    'bg-slack/10 text-slack' => ! $activity->is_critical,
+                    'bg-critical/10 text-critical' => $activity->is_critical || $activity->isOverdue(),
+                    'bg-slack/10 text-slack' => ! $activity->is_critical && ! $activity->isOverdue(),
                 ])>
-                    {{ $activity->is_critical ? 'crítica' : 'holgura '.$activity->slack }}
+                    {{ $activity->isOverdue() ? 'atrasada' : ($activity->is_critical ? 'crítica' : 'holgura '.$activity->slack) }}
                 </span>
             </div>
         </a>

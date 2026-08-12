@@ -74,7 +74,10 @@ it('activa el watcher solo mientras la generación puede avanzar', function () {
         ->get(route('projects.generating', $active))
         ->assertSee('id="generation-watcher"', false)
         ->assertSee('data-watcher-active="true"', false)
-        ->assertSee('role="progressbar"', false);
+        ->assertSee('role="progressbar"', false)
+        ->assertSee('id="generation-progress-message"', false)
+        ->assertSee('id="generation-progress-fill"', false)
+        ->assertSee('data-generation-step="1"', false);
 
     $this->actingAs($this->user)
         ->get(route('projects.generating', $clarifying))

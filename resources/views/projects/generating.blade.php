@@ -11,7 +11,11 @@
         <div class="flex-1"></div>
     </x-slot:topbar>
 
-    <div class="flex h-full flex-col items-center justify-center gap-7 p-10"
+    <div @class([
+        'flex min-h-full flex-col items-center gap-7 p-10',
+        'justify-start' => $project->status === \App\Enums\ProjectStatus::AwaitingInput,
+        'justify-center' => $project->status !== \App\Enums\ProjectStatus::AwaitingInput,
+    ])
          data-status-url="{{ route('projects.status', $project) }}"
          data-stage="{{ $progress['stage'] }}"
          data-step-index="{{ $progress['step_index'] }}"
@@ -44,13 +48,14 @@
             <div class="flex flex-col items-center gap-2 text-center">
                 <x-logo class="size-12 animate-pulse" />
                 <svg class="h-16 w-full max-w-96" viewBox="0 0 320 64" aria-hidden="true">
-                    <path class="generation-route" d="M16 45 C64 12 96 12 144 32 S224 52 304 18" fill="none" stroke="var(--color-brand-500)" stroke-width="2" />
+                    <path class="generation-route-base" d="M16 45 C64 12 96 12 144 32 S224 52 304 18" fill="none" stroke="var(--color-brand-500)" stroke-width="2" />
+                    <path class="generation-route" d="M16 45 C64 12 96 12 144 32 S224 52 304 18" fill="none" stroke="var(--color-brand-500)" stroke-width="3" stroke-linecap="round" />
                     @foreach ([32, 96, 160, 224, 288] as $x)
-                        <circle class="generation-dot" cx="{{ $x }}" cy="{{ $x === 32 || $x === 288 ? 37 : ($x < 160 ? 24 : 40) }}" r="4" fill="var(--color-brand-500)" />
+                        <circle class="generation-dot" style="--dot-delay: {{ $loop->index * 0.18 }}s" cx="{{ $x }}" cy="{{ $x === 32 || $x === 288 ? 37 : ($x < 160 ? 24 : 40) }}" r="4" fill="var(--color-brand-500)" />
                     @endforeach
                 </svg>
                 <h1 class="mt-4 text-2xl font-semibold tracking-tight">Armando la malla de tu proyecto</h1>
-                <p class="text-sm text-ink-500">{{ $progress['message'] }}</p>
+                <p id="generation-progress-message" class="text-sm text-ink-500">{{ $progress['message'] }}</p>
                 <p id="generation-live-status" class="sr-only" role="status" aria-live="polite"></p>
                 <p class="max-w-md text-xs text-ink-500">Puedes volver más tarde; el proyecto seguirá procesándose.</p>
                 @if ($progress['is_stalled'])
@@ -61,8 +66,8 @@
             </div>
 
             {{-- Los pasos nombran lo que está pasando; un spinner mudo no dice nada. --}}
-            <div class="h-1 w-full max-w-96 overflow-hidden rounded-full bg-ink-200" role="progressbar" aria-valuemin="0" aria-valuemax="5" aria-valuenow="{{ $progress['step_index'] ?? 0 }}">
-                <div class="h-full rounded-full bg-brand-500 transition-[width] duration-500" style="width: {{ (($progress['step_index'] ?? 0) / 5) * 100 }}%"></div>
+            <div id="generation-progressbar" class="h-1 w-full max-w-96 overflow-hidden rounded-full bg-ink-200" role="progressbar" aria-valuemin="0" aria-valuemax="{{ $progress['step_count'] ?? 5 }}" aria-valuenow="{{ $progress['step_index'] ?? 0 }}" aria-valuetext="{{ $progress['message'] }}">
+                <div id="generation-progress-fill" class="h-full rounded-full bg-brand-500 transition-[width] duration-500" style="width: {{ (($progress['step_index'] ?? 0) / ($progress['step_count'] ?? 5)) * 100 }}%"></div>
             </div>
             <ol class="flex w-full max-w-96 flex-col gap-0.5">
                 @foreach ([
@@ -72,12 +77,12 @@
                     'Calculando ruta crítica y holguras',
                     'Guardando la malla',
                 ] as $index => $step)
-                    <li @class([
+                    <li data-generation-step="{{ $index + 1 }}" @class([
                         'flex items-center gap-3 rounded-lg px-3 py-2 text-sm',
                         'font-semibold text-brand-600' => $progress['step_index'] === $index + 1,
                         'text-ink-500' => $progress['step_index'] !== $index + 1,
-                    ])>
-                        <span @class([
+                    ]) @if ($progress['step_index'] === $index + 1) aria-current="step" @endif>
+                        <span data-generation-step-dot @class([
                             'size-4 flex-none rounded-full border-[1.5px]',
                             'border-brand-500 bg-brand-500' => $progress['step_index'] !== null && $index + 1 <= $progress['step_index'],
                             'border-ink-300' => $progress['step_index'] === null || $index + 1 > $progress['step_index'],

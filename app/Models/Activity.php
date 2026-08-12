@@ -87,6 +87,21 @@ class Activity extends Model
     }
 
     /**
+     * Una actividad está atrasada si su término previsto ya pasó y todavía no
+     * fue marcada como completada. El día actual todavía cuenta como vigente.
+     */
+    public function isOverdue(): bool
+    {
+        if ($this->isCompleted()) {
+            return false;
+        }
+
+        $finish = $this->finishDate();
+
+        return $finish !== null && $finish->isBefore(now()->startOfDay());
+    }
+
+    /**
      * Fecha de inicio en calendario, derivada del inicio temprano.
      */
     public function startDate(): ?Carbon

@@ -133,7 +133,9 @@ representadas por la malla CPM y en el Gantt se muestran como datos de fila.
 
 `completed_at` solo representa avance del usuario. Marcar una actividad como hecha no modifica ES,
 EF, holgura ni ruta crítica. La malla y el Gantt muestran el estado completado con semántica verde,
-check y texto, incluso si la actividad sigue siendo crítica.
+check y texto, incluso si la actividad sigue siendo crítica. Una actividad no completada cuyo último
+día previsto ya pasó se marca como `isOverdue()` y usa semántica roja; el día actual todavía no se
+considera vencido.
 
 ### 2.11 Dashboard de cartera
 
@@ -540,18 +542,30 @@ GEMINI_TIMEOUT=60
 - **La malla es SVG + posicionamiento absoluto**, sin librería de grafos. Las coordenadas
   salen de `grid_column` / `grid_row`, que ya vienen calculados desde el servidor.
 - **JavaScript, lo mínimo:** `generation-watcher.js` hace una consulta inmediata, evita peticiones
-  simultáneas, aplica timeout/backoff, pausa con la pestaña oculta y recarga una vez al detectar
-  `needs_input`. `cpm-graph.js` centra el nodo seleccionado dentro del viewport sin desplazar la
-  página y respeta `prefers-reduced-motion`.
+  simultáneas, aplica timeout/backoff, pausa con la pestaña oculta, actualiza el mensaje, la barra
+  y los cinco pasos visibles, y recarga una vez al detectar `needs_input`. `cpm-graph.js` centra el
+  nodo seleccionado dentro del viewport sin desplazar la página y respeta `prefers-reduced-motion`.
 - **Estados de la pantalla 05:** Blade renderiza una rama distinta para `AwaitingInput`,
   `Failed`, `Ready` y trabajo activo. El trabajo activo muestra el hito persistido, el paso
   actual y una advertencia si `is_stalled` está activo; la respuesta de preguntas no depende de JS.
+- **Scroll de aclaraciones:** cuando hay preguntas, la pantalla usa `min-h-full` y alineación
+  superior. Así el contenido puede crecer más que el viewport y el `main` conserva el scroll desde
+  la primera pregunta hasta el botón final, sin centrar verticalmente un formulario desbordado.
 - **Accesibilidad:** la ruta crítica se distingue por color **y** por grosor de trazo, más
   la etiqueta textual "crítica" en cada nodo. El color por sí solo no basta.
 - **Gantt:** la tabla visual usa encabezados agrupados, barras con fecha de inicio/término,
   marcadores de hoy/deadline, sombreado de fines de semana y leyenda de ruta crítica/completitud.
-- **Completitud:** cada nodo y barra completados tiene check y texto además del color; el formulario
-  de eliminación usa CSRF, método DELETE y confirmación con el nombre del proyecto.
+  Tanto el nombre de la actividad como su barra son enlaces a la ficha lateral, conservando
+  `view=gantt` y el código seleccionado. La columna de actividades usa un ancho fijo de 320 px;
+  el ancho temporal se calcula por escala y el contenedor permite scroll horizontal, evitando
+  encimar días y etiquetas cuando el horizonte es largo. En el Gantt, la ruta crítica pendiente
+  se muestra en naranja y las actividades atrasadas en rojo; una actividad completada conserva
+  prioridad visual verde.
+- **Animación:** la pantalla 05 usa una ruta SVG base y una capa de guiones animados, además de
+  puntos pulsantes escalonados. Ambos respetan `prefers-reduced-motion`.
+- **Completitud:** cada nodo completado usa relleno `done-soft`, cada barra usa `done`, y ambos
+  tienen check y texto además del color; el formulario de eliminación usa CSRF, método DELETE y
+  confirmación con el nombre del proyecto.
 
 ---
 

@@ -45,6 +45,7 @@ it('construye filas inclusivas, ordenadas y con referencias de precedencia', fun
         ->and($timeline['last_date'])->toBe('2026-01-10')
         ->and($timeline['total_days'])->toBe(10)
         ->and($timeline['scale'])->toBe('day')
+        ->and($timeline['timeline_width'])->toBe(720)
         ->and($timeline['rows'][0]['code'])->toBe('A')
         ->and($timeline['rows'][0]['finish_date'])->toBe('2026-01-02')
         ->and($timeline['rows'][1]['start_date'])->toBe('2026-01-03')

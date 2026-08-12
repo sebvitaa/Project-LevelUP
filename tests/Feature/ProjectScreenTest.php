@@ -42,7 +42,7 @@ it('usa la actividad crítica por defecto cuando el código solicitado no existe
 });
 
 it('muestra la vista Gantt y conserva la actividad seleccionada', function () {
-    $this->actingAs($this->user)
+    $response = $this->actingAs($this->user)
         ->get(route('projects.show', [
             'project' => $this->project,
             'view' => 'gantt',
@@ -55,6 +55,8 @@ it('muestra la vista Gantt y conserva la actividad seleccionada', function () {
         ->assertSee('>E</span>', false)
         ->assertSee('>F</span>', false)
         ->assertSee('view=gantt', false);
+
+    expect(substr_count($response->getContent(), 'activity=B'))->toBeGreaterThanOrEqual(2);
 });
 
 it('manda a la pantalla de espera si la malla todavía no está lista', function () {
@@ -79,8 +81,41 @@ it('marca una actividad como hecha y lo refleja en el avance', function () {
 
     $this->get(route('projects.show', ['project' => $this->project, 'activity' => 'A']))
         ->assertSee('data-completed="true"', false)
+        ->assertSee('bg-done-soft', false)
         ->assertSee('✓ Hecha')
         ->assertSee('crítica');
+
+    $this->get(route('projects.show', [
+        'project' => $this->project,
+        'view' => 'gantt',
+        'activity' => 'A',
+    ]))
+        ->assertSee('bg-done', false)
+        ->assertSee('completada', false);
+
+    $this->get(route('projects.show', [
+        'project' => $this->project,
+        'view' => 'gantt',
+        'activity' => 'C',
+    ]))
+        ->assertSee('bg-slack', false);
+});
+
+it('marca visualmente una actividad vencida y adapta el nodo a nombres largos', function () {
+    $this->project->forceFill(['starts_on' => now()->subDays(10)->toDateString()])->save();
+    $overdue = $this->project->activities()->where('code', 'A')->sole();
+    $overdue->setRelation('project', $this->project->refresh());
+
+    $this->actingAs($this->user)
+        ->get(route('projects.show', ['project' => $this->project, 'activity' => 'A']))
+        ->assertOk()
+        ->assertSee('data-overdue="true"', false)
+        ->assertSee('bg-critical-soft', false)
+        ->assertSee('Atrasada')
+        ->assertSee('width: 220px; height: 104px;', false)
+        ->assertSee('line-clamp-3', false);
+
+    expect($overdue->isOverdue())->toBeTrue();
 });
 
 it('permite devolver una actividad completada a pendiente', function () {

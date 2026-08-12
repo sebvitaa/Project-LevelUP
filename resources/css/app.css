@@ -61,7 +61,8 @@
 }
 
 @keyframes levelup-dash {
-    to { stroke-dashoffset: -24; }
+    from { stroke-dashoffset: 0; }
+    to { stroke-dashoffset: -52; }
 }
 
 @keyframes levelup-pulse {
@@ -69,18 +70,26 @@
     50% { opacity: 1; transform: scale(1); }
 }
 
+.generation-route-base {
+    opacity: 0.18;
+}
+
 .generation-route {
-    stroke-dasharray: 6 18;
-    animation: levelup-dash 2.4s linear infinite;
+    stroke-dasharray: 12 18;
+    stroke-dashoffset: 0;
+    animation: levelup-dash 1.2s linear infinite;
+    will-change: stroke-dashoffset;
 }
 
 .generation-dot {
     transform-box: fill-box;
     transform-origin: center;
     animation: levelup-pulse 1.8s ease-in-out infinite;
+    animation-delay: var(--dot-delay, 0s);
 }
 
 @media (prefers-reduced-motion: reduce) {
     .generation-route,
+    .generation-route-base,
     .generation-dot { animation: none; }
 }
