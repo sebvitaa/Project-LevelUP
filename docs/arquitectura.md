@@ -232,6 +232,7 @@ database/
 
 docs/
 ├── arquitectura.md                   Este archivo
+├── prompt.md                         Pruebas de los prompts contra la API y cambios aplicados
 ├── mockups/
 │   └── project-levelup-mockups.html  Las 6 pantallas + sistema de diseño
 └── plantilla-propuesta-laravel.docx  Propuesta entregada al ramo
@@ -472,8 +473,8 @@ Sirve como caso de verificación a ojo:
 Clases con una responsabilidad cada una:
 
 - **`PromptBuilder`** arma el *system prompt* (rol, reglas, contexto según
-  `ProjectType::domainHint()`), el *user prompt* (descripción + fechas + equipo) y el
-  `responseSchema`.
+  `ProjectType::domainHint()`), el *user prompt* (descripción + fechas + equipo + días
+  disponibles hasta el plazo) y el `responseSchema`.
 - **`GeminiClient`** solo habla HTTP: `POST {base_url}/models/{model}:generateContent`
   con la clave en el header `x-goog-api-key`, y devuelve el JSON decodificado. Se falsea
   en los tests con `Http::fake()`.
@@ -486,6 +487,14 @@ Clases con una responsabilidad cada una:
 Se usa **respuesta estructurada** (`responseMimeType: application/json` +
 `responseSchema`) para no tener que parsear texto libre, con `temperature: 0.2` para que
 la salida sea lo más estable posible.
+
+Los días disponibles hasta la fecha límite se calculan en PHP (`PromptBuilder::availableDays()`)
+y se le pasan al modelo como dato, por la misma razón que el CPM no se le pide a la IA: se
+equivoca haciendo aritmética de fechas. El texto de los dos prompts se ajustó contra la API real
+con un banco de escenarios; el registro de esas pruebas, lo que se encontró y lo que se cambió
+está en [`docs/prompt.md`](prompt.md). Ese archivo hay que actualizarlo cuando se reescriban las
+reglas de `PromptBuilder` o `ClarificationPromptBuilder`, junto con las aserciones de
+`tests/Unit/ClarificationPromptBuilderTest.php`, que afirman sobre el texto literal del prompt.
 
 Regenerar **reemplaza** la malla completa: borrar y volver a crear, no mezclar. Mezclar
 dos grafos distintos daría dependencias inconsistentes.
@@ -651,3 +660,12 @@ pendientes de decisión del equipo:
 - [ ] Recuperación de contraseña.
 - [ ] Notificaciones externas; actualmente la app actualiza la pantalla mediante polling y no
       promete correo ni push.
+- [ ] Distinguir en `GeminiClient` la cuota agotada (429) y la sobrecarga del modelo (503) de una
+      caída de red, y respetar el `retryDelay` que manda la API en vez de reintentar a los 500 ms.
+      Hoy las tres cosas llegan al usuario como «No pudimos contactar al servicio de IA».
+      Ver [`docs/prompt.md`](prompt.md) §5.
+- [ ] Elegir el modelo de producción con la cuota en mente: el free tier de `gemini-3.5-flash`
+      permite 20 requests por día para toda la aplicación y cada proyecto gasta 2.
+- [ ] Arreglar los cuatro tests que fallan desde antes del ajuste de prompts, la inestabilidad por
+      orden de ejecución de `ScheduleGenerationTest` y el arranque de los tests de `tests/Unit`,
+      que hoy no cargan la aplicación. Detalle en [`docs/prompt.md`](prompt.md) §5.

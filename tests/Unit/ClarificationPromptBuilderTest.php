@@ -16,7 +16,7 @@ it('distingue preguntas abiertas y de selección en el contrato del prompt', fun
 
     expect($instruction)
         ->toContain('Una pregunta text')
-        ->toContain('no debe incluir options')
+        ->toContain('options como lista vacía []')
         ->toContain('Una pregunta select')
-        ->toContain('entre 2 y 8 options');
+        ->toContain('entre 2 y 8 opciones');
 });
