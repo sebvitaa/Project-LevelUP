@@ -18,6 +18,8 @@ class Project extends Model
     /** @use HasFactory<ProjectFactory> */
     use HasFactory;
 
+    public const RISK_THRESHOLD_DAYS = 7;
+
     protected $attributes = [
         'generation_attempt' => 0,
     ];
@@ -102,13 +104,34 @@ class Project extends Model
      */
     public function completionPercentage(): int
     {
-        $total = $this->activities()->count();
+        [$total, $completed] = $this->activityCounts();
 
         if ($total === 0) {
             return 0;
         }
 
-        return (int) round($this->activities()->whereNotNull('completed_at')->count() / $total * 100);
+        return (int) round($completed / $total * 100);
+    }
+
+    /**
+     * @return array{0: int, 1: int}
+     */
+    private function activityCounts(): array
+    {
+        $hasCounts = array_key_exists('activities_count', $this->attributes)
+            && array_key_exists('completed_activities_count', $this->attributes);
+
+        if ($hasCounts) {
+            return [
+                (int) $this->attributes['activities_count'],
+                (int) $this->attributes['completed_activities_count'],
+            ];
+        }
+
+        return [
+            $this->activities()->count(),
+            $this->activities()->whereNotNull('completed_at')->count(),
+        ];
     }
 
     /**
@@ -140,6 +163,40 @@ class Project extends Model
     public function isOverdue(): bool
     {
         return ($this->daysBehindSchedule() ?? 0) > 0;
+    }
+
+    public function isCompleted(): bool
+    {
+        return $this->completionPercentage() === 100;
+    }
+
+    public function isAtRisk(): bool
+    {
+        if ($this->status === ProjectStatus::Failed) {
+            return true;
+        }
+
+        if ($this->isCompleted()) {
+            return false;
+        }
+
+        $daysBehind = $this->daysBehindSchedule();
+
+        return $daysBehind !== null && $daysBehind > -self::RISK_THRESHOLD_DAYS;
+    }
+
+    /**
+     * @return 'done'|'critical'|'slack'|'brand'
+     */
+    public function healthTone(): string
+    {
+        return match (true) {
+            $this->isCompleted() => 'done',
+            $this->isOverdue(), $this->status === ProjectStatus::Failed => 'critical',
+            $this->isAtRisk() => 'slack',
+            $this->status === ProjectStatus::Ready => 'done',
+            default => 'brand',
+        };
     }
 
     public function isCurrentGenerationAttempt(int $attempt): bool

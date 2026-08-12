@@ -45,3 +45,42 @@ it('invita a crear el primero cuando no hay proyectos', function () {
         ->assertOk()
         ->assertSee('Todavía no tienes proyectos');
 });
+
+it('filtra proyectos en riesgo y completados', function () {
+    $user = User::factory()->create();
+    $risk = Project::factory()->ready()->for($user)->create([
+        'name' => 'Proyecto en riesgo',
+        'starts_on' => now()->subDays(30),
+        'deadline' => now()->subDay(),
+        'total_duration_days' => 40,
+    ]);
+    Activity::factory()->for($risk)->create();
+    $done = Project::factory()->ready()->for($user)->create(['name' => 'Proyecto terminado']);
+    Activity::factory()->completed()->for($done)->create();
+
+    $this->actingAs($user)->get(route('dashboard', ['filtro' => 'riesgo']))
+        ->assertOk()->assertSee('Proyecto en riesgo')->assertDontSee('Proyecto terminado');
+    $this->actingAs($user)->get(route('dashboard', ['filtro' => 'completados']))
+        ->assertOk()->assertSee('Proyecto terminado')->assertDontSee('Proyecto en riesgo');
+});
+
+it('busca por proyecto o actividad sin mostrar proyectos ajenos', function () {
+    $user = User::factory()->create();
+    $project = Project::factory()->ready()->for($user)->create(['name' => 'Migración interna']);
+    Activity::factory()->for($project)->create(['name' => 'Conectar facturación']);
+    Project::factory()->ready()->for($user)->create(['name' => 'Sitio corporativo']);
+    $other = Project::factory()->ready()->create(['name' => 'Facturación ajena']);
+
+    $this->actingAs($user)->get(route('dashboard', ['q' => 'facturación']))
+        ->assertOk()->assertSee('Migración interna')->assertDontSee('Sitio corporativo')
+        ->assertDontSee($other->name);
+});
+
+it('ordena la cartera por nombre', function () {
+    $user = User::factory()->create();
+    Project::factory()->ready()->for($user)->create(['name' => 'Zulu']);
+    Project::factory()->ready()->for($user)->create(['name' => 'Alfa']);
+
+    $this->actingAs($user)->get(route('dashboard', ['orden' => 'nombre']))
+        ->assertOk()->assertSeeInOrder(['Alfa', 'Zulu']);
+});

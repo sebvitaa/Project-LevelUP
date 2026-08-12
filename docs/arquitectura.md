@@ -135,6 +135,25 @@ representadas por la malla CPM y en el Gantt se muestran como datos de fila.
 EF, holgura ni ruta crítica. La malla y el Gantt muestran el estado completado con semántica verde,
 check y texto, incluso si la actividad sigue siendo crítica.
 
+### 2.11 Dashboard de cartera
+
+El dashboard resume siempre la cartera completa del usuario autenticado y aplica filtros,
+orden y búsqueda solamente a la grilla visible. Los parámetros GET son `filtro`
+(`todos`, `riesgo`, `completados`), `orden` (`fecha-limite`, `avance`, `nombre`) y `q`.
+La búsqueda cubre nombre de proyecto y nombre/descripción de actividad, restringida
+desde la consulta al propietario.
+
+Los KPI se calculan desde proyectos y actividades persistidos. `DashboardFilter` y
+`DashboardSort` concentran la semántica; `Project::isCompleted()`, `isAtRisk()` y
+`healthTone()` son la fuente común para tarjetas y barra lateral. Un view composer carga
+los seis proyectos laterales con conteos, evitando lazy loading dentro de Blade.
+
+La interfaz incorpora `avatar`, `nav-icon` y los parciales `filter-tabs`, `sort-menu`,
+`kpi-row` y `sparkline`. Los controles conservan los demás parámetros activos y muestran
+estados vacíos distintos para una cartera vacía y una consulta sin coincidencias.
+`DashboardDemoSeeder` crea una cartera reproducible y reutiliza `DemoProjectSeeder`; no
+realiza llamadas a Gemini y puede ejecutarse repetidamente mediante `updateOrCreate`.
+
 ---
 
 ## 3. Estructura de carpetas

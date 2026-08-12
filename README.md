@@ -31,7 +31,7 @@ cronograma en minutos.
 | # | Pantalla | Qué hace |
 |---|---|---|
 | 01 | Login / Registro | Sesión con cuota mensual de generaciones |
-| 02 | Dashboard | Proyectos con % de avance, fecha límite y estado |
+| 02 | Dashboard | KPIs de cartera, búsqueda, filtros, orden, avance, fecha límite y estado |
 | 03 | Tipo de proyecto | Ajusta el vocabulario y las actividades que sugerirá la IA |
 | 04 | Prompt | Descripción libre + fechas y tamaño del equipo |
 | 05 | Generando | Análisis en cola, preguntas opcionales y polling del estado cada 2 s |

@@ -20,18 +20,26 @@
     --color-brand-600: #1a3fd0;
 
     /* Neutros con sesgo azul */
+    --color-page: #f4f6fc;
     --color-ink-50: #f7f9fe;
     --color-ink-100: #eef2fb;
     --color-ink-200: #e3e8f4;
     --color-ink-300: #d3dbee;
+    --color-ink-400: #949db6;
     --color-ink-500: #66718c;
     --color-ink-700: #3c465e;
     --color-ink-900: #0b1220;
 
     /* Semánticos: separados del acento de marca */
     --color-done: #12a57a;
+    --color-done-soft: #e2f6ef;
     --color-slack: #e5a03a;
+    --color-slack-soft: #fdf3e2;
     --color-critical: #e0524a;
+    --color-critical-soft: #fdecea;
+    --color-avatar-blue: #2b57f6;
+    --color-avatar-violet: #7b5cf0;
+    --color-avatar-amber: #e5a03a;
 }
 
 /* Trama de puntos: el mismo motivo del logo. */
@@ -44,6 +52,12 @@
 @utility num {
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
+}
+
+@utility shadow-card {
+    box-shadow:
+        0 1px 2px rgba(11, 18, 32, 0.05),
+        0 12px 32px -12px rgba(11, 18, 32, 0.18);
 }
 
 @keyframes levelup-dash {
