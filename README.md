@@ -25,7 +25,7 @@ cronograma en minutos.
 ```
 01 Login/Registro → 02 Dashboard → 03 Tipo de proyecto → 04 Prompt
                          ↑                                    ↓
-                         └──────── 06 Malla CPM ←──── 05 Generando
+                         └──── 06 Malla CPM/Gantt ←── 05 Generando
 ```
 
 | # | Pantalla | Qué hace |
@@ -34,8 +34,8 @@ cronograma en minutos.
 | 02 | Dashboard | Proyectos con % de avance, fecha límite y estado |
 | 03 | Tipo de proyecto | Ajusta el vocabulario y las actividades que sugerirá la IA |
 | 04 | Prompt | Descripción libre + fechas y tamaño del equipo |
-| 05 | Generando | Job en cola; la vista consulta el estado cada 2 s |
-| 06 | Malla CPM | Nodos, aristas, ruta crítica y ficha de cada actividad |
+| 05 | Generando | Análisis en cola, preguntas opcionales y polling del estado cada 2 s |
+| 06 | Malla CPM/Gantt | Nodos, ruta crítica, fechas, barras y ficha de cada actividad |
 
 Los mockups de las seis pantallas están en
 [`docs/mockups/project-levelup-mockups.html`](docs/mockups/project-levelup-mockups.html).
@@ -117,7 +117,7 @@ El seed crea un proyecto de demostración con la misma malla de los mockups
 ## Pruebas
 
 ```bash
-php artisan test --compact          # 46 pruebas
+php artisan test --compact
 php artisan test --filter=CpmCalculatorTest
 vendor/bin/pint                     # formato antes de cerrar cualquier cambio
 ```
@@ -130,9 +130,10 @@ tres coinciden, el cálculo está bien.
 
 ## Estado
 
-Funcionando de punta a punta: registro, creación asistida, generación con IA, cálculo CPM,
-malla navegable y edición de actividades con recálculo automático de la ruta crítica.
+Funcionando de punta a punta: registro, creación asistida, aclaraciones opcionales, generación
+con IA, cálculo CPM, malla navegable, Gantt y edición de actividades con recálculo automático de
+la ruta crítica. Las generaciones consumen una consulta solo cuando la malla final queda lista.
 
-Pendiente: llevar las vistas a la fidelidad visual de los mockups, vistas Gantt y Lista,
-exportar y compartir. La lista completa está al final de
+Pendiente: vista Lista, exportar, compartir, notificaciones y reinicio mensual automático de
+créditos. La lista completa está al final de
 [`docs/arquitectura.md`](docs/arquitectura.md).

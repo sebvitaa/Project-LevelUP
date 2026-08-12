@@ -64,6 +64,31 @@ it('expone que el proyecto necesita respuestas sin considerarlo terminal', funct
         ]);
 });
 
+it('activa el watcher solo mientras la generación puede avanzar', function () {
+    $active = Project::factory()->generating()->for($this->user)->create();
+    $clarifying = Project::factory()->clarifying()->for($this->user)->create();
+    $awaiting = Project::factory()->awaitingInput()->for($this->user)->create();
+    $failed = Project::factory()->failed()->for($this->user)->create();
+
+    $this->actingAs($this->user)
+        ->get(route('projects.generating', $active))
+        ->assertSee('id="generation-watcher"', false)
+        ->assertSee('data-watcher-active="true"', false)
+        ->assertSee('role="progressbar"', false);
+
+    $this->actingAs($this->user)
+        ->get(route('projects.generating', $clarifying))
+        ->assertSee('data-watcher-active="true"', false);
+
+    $this->actingAs($this->user)
+        ->get(route('projects.generating', $awaiting))
+        ->assertSee('data-watcher-active="false"', false);
+
+    $this->actingAs($this->user)
+        ->get(route('projects.generating', $failed))
+        ->assertSee('data-watcher-active="false"', false);
+});
+
 it('redirecciona un borrador al dashboard y un tercero no puede consultar el estado', function () {
     $draft = Project::factory()->draft()->for($this->user)->create();
 

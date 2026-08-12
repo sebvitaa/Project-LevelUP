@@ -122,6 +122,19 @@ it('ignora el resultado si el intento cambió durante la llamada', function () {
     Queue::assertNothingPushed();
 });
 
+it('termina sin efectos si el proyecto fue eliminado antes del job de aclaraciones', function () {
+    Http::fake();
+
+    $projectId = $this->project->getKey();
+    $this->project->delete();
+
+    (new GenerateProjectClarifications($projectId, 1))
+        ->handle(app(ProjectClarificationGenerator::class));
+
+    Http::assertNothingSent();
+    expect(Project::query()->find($projectId))->toBeNull();
+});
+
 it('anexa las respuestas confirmadas al prompt final', function () {
     $project = Project::factory()->generating()->for($this->user)->create();
     ProjectClarification::factory()->answered('REST y pagos')

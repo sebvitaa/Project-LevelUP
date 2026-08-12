@@ -116,6 +116,25 @@ transita directamente de `Clarifying`/`analyzing_brief` a `Generating`/`requesti
 falta, queda en `AwaitingInput`/`awaiting_answers`. Ninguna llamada de análisis consume crédito:
 solo se cobra cuando la malla final llega a `Ready`.
 
+### 2.9 El calendario y el Gantt se derivan del CPM
+
+`Activity::startDate()` y `finishDate()` usan intervalos inclusivos: una actividad de un día que
+empieza el 1 de enero termina el 1 de enero. `Project::projectedFinishDate()` aplica la misma regla
+a la duración total. `GanttTimelineBuilder` recibe el proyecto y sus actividades ya cargadas,
+calcula el horizonte hasta el mayor entre el término CPM y el deadline, y devuelve un contrato de
+presentación sin escribir en la base ni recalcular el grafo.
+
+La pantalla 06 acepta `?view=network|gantt`; ambas vistas conservan `?activity={code}`. La vista
+Gantt cambia de escala diaria a semanal y mensual según el horizonte, agrupa meses, marca hoy y el
+deadline, y distingue fines de semana. Las barras no dibujan flechas: las precedencias ya están
+representadas por la malla CPM y en el Gantt se muestran como datos de fila.
+
+### 2.10 El avance es independiente de la planificación
+
+`completed_at` solo representa avance del usuario. Marcar una actividad como hecha no modifica ES,
+EF, holgura ni ruta crítica. La malla y el Gantt muestran el estado completado con semántica verde,
+check y texto, incluso si la actividad sigue siendo crítica.
+
 ---
 
 ## 3. Estructura de carpetas
@@ -167,9 +186,11 @@ app/
     │   ├── ProjectClarificationGenerator.php Valida y persiste preguntas
     │   ├── ProjectPlanGenerator.php  Orquesta prompt → validación → CPM → guardado
     │   └── PromptBuilder.php         Arma system prompt, user prompt y responseSchema
-    └── Cpm/
+    ├── Cpm/
         ├── CpmCalculator.php         Pasadas hacia adelante y atrás, holguras, layout
         └── ScheduledActivity.php     Resultado inmutable por actividad
+    └── Gantt/
+        └── GanttTimelineBuilder.php  Contrato temporal y filas para la vista Gantt
 
 database/
 ├── factories/
@@ -195,7 +216,11 @@ docs/
 └── plantilla-propuesta-laravel.docx  Propuesta entregada al ramo
 
 resources/
-├── css/app.css                       Tokens de marca en @theme (Tailwind v4)
+├── css/app.css                       Tokens de marca, animación y reduced motion
+├── js/
+│   ├── app.js                         Entradas de watcher y scroll CPM
+│   ├── generation-watcher.js          Polling robusto de la pantalla 05
+│   └── cpm-graph.js                   Centrado progresivo de la actividad seleccionada
 └── views/
     ├── auth/
     │   ├── login.blade.php           Pantalla 01
@@ -218,6 +243,8 @@ resources/
         └── partials/
             ├── activity-detail.blade.php   Ficha lateral de la actividad
             ├── cpm-graph.blade.php         Nodos + aristas SVG de la malla
+            ├── gantt-chart.blade.php       Carta Gantt derivada del contrato temporal
+            ├── clarifications-form.blade.php Preguntas text/select accesibles
             └── stepper.blade.php           Indicador de paso 1/2/3
 
 tests/
@@ -229,9 +256,14 @@ tests/
 │   ├── ProjectWizardTest.php         Asistente, validación y autorización
 │   ├── ProjectClarificationFlowTest.php Análisis, transición, validación y prompt final
 │   ├── ProjectClarificationModelTest.php Estados, casts, relación y filtro por intento vigente
+│   ├── ProjectGenerationStatusTest.php Contrato de progreso y estados del watcher
+│   ├── ProjectClarificationAnswersTest.php Formulario, selects y respuestas abiertas
 │   └── ScheduleGenerationTest.php    Integración con Gemini vía Http::fake()
 └── Unit/
     ├── CpmCalculatorTest.php         12 casos del algoritmo CPM
+    ├── ClarificationPromptBuilderTest.php Reglas text/select del prompt
+    ├── GanttTimelineBuilderTest.php   Escalas, horizonte, filas y markers
+    ├── TimelineContractTest.php       Fechas inclusivas y deadlines
     ├── ProjectGenerationStageTest.php  Etapas, terminalidad y casts de metadata
     ├── ProjectStatusTest.php           Estados conversacionales y terminalidad
     └── QueueConfigurationTest.php      Retry de cola superior al timeout del job
@@ -318,6 +350,11 @@ preguntas sin respuesta del intento vigente.
 
 Índices: único `(project_id, code)`, e índice `(project_id, is_critical)`.
 
+Los tiempos CPM son intervalos de días corridos con inicio incluido: `early_start = 0` y
+`duration_days = 1` producen la misma fecha de inicio y término. `finishDate()` y
+`projectedFinishDate()` restan un día al final temprano o a la duración total para conservar esa
+semántica.
+
 ### `activity_dependencies`
 
 Aristas del grafo. `activity_id` no puede empezar hasta que `predecessor_id` termine
@@ -359,6 +396,10 @@ Todas en `routes/web.php`. Las URL están en español porque son visibles para e
 | `DELETE` | `/projects/{project}` | `projects.destroy` | 06 |
 | `PATCH` | `/activities/{activity}` | `activities.update` | 06 |
 | `POST` | `/activities/{activity}/completar` | `activities.toggle` | 06 |
+
+`projects.show` admite `view=network|gantt`; `activity={code}` conserva la selección al cambiar
+de vista y después de editar o completar una actividad. El endpoint de estado de la pantalla 05
+es consultado por el watcher solo en estados `Clarifying` y `Generating`.
 
 Middleware: `guest` en login y registro, `auth` en todo el resto.
 Autorización: `ProjectPolicy` mediante `$this->authorize()` en los controladores.
@@ -479,13 +520,19 @@ GEMINI_TIMEOUT=60
   `<x-layouts.guest>` partido con panel de marca para login y registro.
 - **La malla es SVG + posicionamiento absoluto**, sin librería de grafos. Las coordenadas
   salen de `grid_column` / `grid_row`, que ya vienen calculados desde el servidor.
-- **JavaScript, lo mínimo:** solo el *polling* de la pantalla 05. No hay framework de
-  frontend.
+- **JavaScript, lo mínimo:** `generation-watcher.js` hace una consulta inmediata, evita peticiones
+  simultáneas, aplica timeout/backoff, pausa con la pestaña oculta y recarga una vez al detectar
+  `needs_input`. `cpm-graph.js` centra el nodo seleccionado dentro del viewport sin desplazar la
+  página y respeta `prefers-reduced-motion`.
 - **Estados de la pantalla 05:** Blade renderiza una rama distinta para `AwaitingInput`,
   `Failed`, `Ready` y trabajo activo. El trabajo activo muestra el hito persistido, el paso
   actual y una advertencia si `is_stalled` está activo; la respuesta de preguntas no depende de JS.
 - **Accesibilidad:** la ruta crítica se distingue por color **y** por grosor de trazo, más
   la etiqueta textual "crítica" en cada nodo. El color por sí solo no basta.
+- **Gantt:** la tabla visual usa encabezados agrupados, barras con fecha de inicio/término,
+  marcadores de hoy/deadline, sombreado de fines de semana y leyenda de ruta crítica/completitud.
+- **Completitud:** cada nodo y barra completados tiene check y texto además del color; el formulario
+  de eliminación usa CSRF, método DELETE y confirmación con el nombre del proyecto.
 
 ---
 
@@ -508,6 +555,9 @@ La suite se ejecuta con `php artisan test --compact`.
 | `Feature/ProjectClarificationFlowTest.php` | Análisis sin cobro, 0 o 1–3 preguntas, transición, intentos antiguos y respuestas en el prompt final |
 | `Feature/ProjectClarificationAnswersTest.php` | Formulario, autorización, respuestas completas, selects e ids ajenos |
 | `Feature/ProjectGenerationStatusTest.php` | Contrato JSON, no-store, fases, estados de input, estancamiento y autorización |
+| `Unit/ClarificationPromptBuilderTest.php` | Distinción entre preguntas abiertas y cerradas |
+| `Unit/GanttTimelineBuilderTest.php` | Escalas, horizonte, filas, precedencias y fines de semana |
+| `Unit/TimelineContractTest.php` | Actividades de un día, cadenas, años bisiestos y deadlines |
 
 **Cuidado con `Model::shouldBeStrict()`** (activo fuera de producción): detecta *lazy
 loading* y atributos faltantes. Donde un modelo llega por *route model binding* y necesita
@@ -561,8 +611,10 @@ pendientes de decisión del equipo:
 
 - [ ] Llevar las vistas Blade a la fidelidad visual de los mockups (hoy son funcionales,
       con los tokens correctos, pero más sobrias).
-- [ ] Vistas Gantt y Lista de la pantalla 06 (las pestañas están diseñadas, no
-      implementadas).
+- [x] Vista Gantt derivada del CPM, con escalas diaria/semanal/mensual, deadline y progreso.
+- [ ] Vista Lista de la pantalla 06.
 - [ ] Exportar y compartir el proyecto.
 - [ ] Reinicio mensual automático de `ai_credits_used` (tarea programada).
 - [ ] Recuperación de contraseña.
+- [ ] Notificaciones externas; actualmente la app actualiza la pantalla mediante polling y no
+      promete correo ni push.

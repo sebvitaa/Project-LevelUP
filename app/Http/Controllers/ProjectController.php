@@ -8,6 +8,7 @@ use App\Http\Requests\StoreProjectRequest;
 use App\Jobs\GenerateProjectClarifications;
 use App\Jobs\GenerateProjectSchedule;
 use App\Models\Project;
+use App\Services\Gantt\GanttTimelineBuilder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -47,7 +48,7 @@ class ProjectController extends Controller
     /**
      * Pantalla 06 — malla CPM con las actividades y sus descripciones.
      */
-    public function show(Request $request, Project $project): View|RedirectResponse
+    public function show(Request $request, Project $project, GanttTimelineBuilder $gantt): View|RedirectResponse
     {
         $this->authorize('view', $project);
 
@@ -61,6 +62,10 @@ class ProjectController extends Controller
         // Activity::startDate() no gatille una consulta por cada nodo.
         $project->activities->each->setRelation('project', $project);
 
+        $view = in_array($request->query('view'), ['network', 'gantt'], true)
+            ? $request->query('view')
+            : 'network';
+
         // ?activity=D deja seleccionada esa actividad al volver desde un nodo.
         $selected = $project->activities->firstWhere('code', $request->query('activity'))
             ?? $project->activities->firstWhere('is_critical', true)
@@ -69,6 +74,8 @@ class ProjectController extends Controller
         return view('projects.show', [
             'project' => $project,
             'selected' => $selected,
+            'view' => $view,
+            'timeline' => $view === 'gantt' ? $gantt->build($project, $project->activities) : null,
         ]);
     }
 

@@ -24,6 +24,7 @@
     );
 @endphp
 
+<div id="cpm-scroll-viewport" class="min-h-full min-w-full overflow-auto" data-selected-activity="{{ $selected?->code }}">
 <div class="relative" style="width: {{ $canvasWidth }}px; height: {{ $canvasHeight }}px;">
     {{-- Aristas: cada dependencia es una curva del borde derecho al izquierdo. --}}
     <svg class="absolute inset-0 overflow-visible" width="{{ $canvasWidth }}" height="{{ $canvasHeight }}" aria-hidden="true">
@@ -48,7 +49,9 @@
                     $midX = $x1 + ($x2 - $x1) / 2;
 
                     // La arista es crítica solo si ambos extremos lo son.
-                    $isCritical = $activity->is_critical && $predecessor->is_critical;
+                    $isCritical = $activity->is_critical
+                        && $predecessor->is_critical
+                        && $predecessor->early_finish === $activity->early_start;
                 @endphp
 
                 <path d="M{{ $x1 }} {{ $y1 }} C {{ $midX }} {{ $y1 }}, {{ $midX }} {{ $y2 }}, {{ $x2 }} {{ $y2 }}"
@@ -64,17 +67,23 @@
     @foreach ($project->activities as $activity)
         @php $point = $coordinates[$activity->id]; @endphp
 
-        <a href="{{ route('projects.show', ['project' => $project, 'activity' => $activity->code]) }}"
+        <a id="activity-{{ $activity->code }}" data-activity-code="{{ $activity->code }}" href="{{ route('projects.show', ['project' => $project, 'activity' => $activity->code, 'view' => $view ?? 'network']) }}"
            @class([
                'absolute flex flex-col justify-between rounded-xl border-[1.5px] bg-white p-2.5 shadow-sm',
-               'border-critical ring-3 ring-critical/10' => $activity->is_critical,
-               'border-ink-300' => ! $activity->is_critical,
+               'border-critical ring-3 ring-critical/10' => $activity->is_critical && ! $activity->isCompleted(),
+               'border-ink-300' => ! $activity->is_critical && ! $activity->isCompleted(),
                'ring-3 ring-brand-100 border-brand-500' => $selected?->is($activity),
+               'border-done bg-done/10' => $activity->isCompleted(),
            ])
+           @if ($selected?->is($activity)) aria-current="true" @endif
+           data-completed="{{ $activity->isCompleted() ? 'true' : 'false' }}"
            style="left: {{ $point['x'] }}px; top: {{ $point['y'] }}px; width: {{ $nodeWidth }}px; height: {{ $nodeHeight }}px;">
 
             <div class="flex items-center justify-between">
                 <span class="num text-[10px] font-semibold text-ink-500">{{ $activity->code }}</span>
+                @if ($activity->isCompleted())
+                    <span class="text-[10px] font-bold text-done">✓ Hecha</span>
+                @endif
                 <span @class([
                     'num text-[11px] font-semibold',
                     'text-critical' => $activity->is_critical,
@@ -99,6 +108,7 @@
             </div>
         </a>
     @endforeach
+</div>
 </div>
 
 {{-- Leyenda: la ruta crítica se distingue por color y por grosor de trazo. --}}

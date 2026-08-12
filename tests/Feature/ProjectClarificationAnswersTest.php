@@ -33,6 +33,8 @@ it('muestra las preguntas al dueño del proyecto', function () {
         ->assertOk()
         ->assertSee('¿Qué alcance debe cubrir?')
         ->assertSee('¿Qué plataforma es prioritaria?')
+        ->assertSee('<textarea', false)
+        ->assertSee('type="radio"', false)
         ->assertSee('Continuar con la generación');
 });
 

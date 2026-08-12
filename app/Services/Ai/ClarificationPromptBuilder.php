@@ -23,6 +23,8 @@ class ClarificationPromptBuilder
         - No preguntes por nombre, tipo, fecha inicial, deadline ni tamaño del equipo: ya están dados.
         - Si el brief es suficientemente específico, responde needs_clarification=false y questions=[].
         - Usa input_type=text para respuestas abiertas o select para una elección acotada.
+        - Una pregunta text debe poder responderse con una explicación breve y no debe incluir options.
+        - Una pregunta select debe pedir una sola decisión y debe incluir entre 2 y 8 options.
         - Para select entrega entre 2 y 8 opciones cortas, únicas y mutuamente distinguibles.
         - Escribe en español y no incluyas texto fuera del JSON solicitado.
         PROMPT;

@@ -45,3 +45,28 @@
     font-family: var(--font-mono);
     font-variant-numeric: tabular-nums;
 }
+
+@keyframes levelup-dash {
+    to { stroke-dashoffset: -24; }
+}
+
+@keyframes levelup-pulse {
+    0%, 100% { opacity: 0.45; transform: scale(0.92); }
+    50% { opacity: 1; transform: scale(1); }
+}
+
+.generation-route {
+    stroke-dasharray: 6 18;
+    animation: levelup-dash 2.4s linear infinite;
+}
+
+.generation-dot {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: levelup-pulse 1.8s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .generation-route,
+    .generation-dot { animation: none; }
+}

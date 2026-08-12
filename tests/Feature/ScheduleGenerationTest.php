@@ -188,6 +188,19 @@ it('ignora un job de un intento anterior', function () {
         ->and($this->project->status)->toBe(ProjectStatus::Generating);
 });
 
+it('termina sin efectos si el proyecto fue eliminado antes de que corriera el job', function () {
+    Http::fake();
+
+    $projectId = $this->project->getKey();
+    $this->project->delete();
+
+    (new GenerateProjectSchedule($projectId, 1))
+        ->handle(app(ProjectPlanGenerator::class));
+
+    Http::assertNothingSent();
+    expect(Project::query()->find($projectId))->toBeNull();
+});
+
 it('no permite que un job antiguo marque como fallido un proyecto listo', function () {
     $this->project->forceFill([
         'status' => ProjectStatus::Ready,

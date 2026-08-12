@@ -120,7 +120,7 @@ class Project extends Model
             return null;
         }
 
-        return $this->starts_on->copy()->addDays($this->total_duration_days);
+        return $this->starts_on->copy()->addDays($this->total_duration_days - 1);
     }
 
     /**

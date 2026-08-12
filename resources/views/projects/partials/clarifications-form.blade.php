@@ -12,17 +12,19 @@
 
         @foreach ($clarifications as $clarification)
             <fieldset class="flex flex-col gap-2.5 rounded-xl border border-ink-200 p-5">
-                <legend class="px-1 text-sm font-semibold text-ink-900">{{ $clarification->question }}</legend>
+                <legend class="sr-only">Pregunta {{ $loop->iteration }}</legend>
+                <label id="clarification-question-{{ $clarification->getKey() }}" @if ($clarification->input_type !== 'select') for="clarification-{{ $clarification->getKey() }}" @endif class="text-sm font-semibold text-ink-900">{{ $clarification->question }}</label>
 
                 @if ($clarification->rationale)
                     <p class="text-xs leading-relaxed text-ink-500">{{ $clarification->rationale }}</p>
                 @endif
 
                 @if ($clarification->input_type === 'select')
-                    <div class="mt-1 flex flex-col gap-2" role="radiogroup" aria-label="{{ $clarification->question }}">
+                    <div class="mt-1 flex flex-col gap-2" role="radiogroup" aria-labelledby="clarification-question-{{ $clarification->getKey() }}">
                         @foreach ($clarification->options ?? [] as $option)
                             <label class="flex cursor-pointer items-center gap-2 rounded-lg border border-ink-200 px-3 py-2.5 text-sm text-ink-700 hover:border-brand-300">
                                 <input
+                                    id="clarification-{{ $clarification->getKey() }}-{{ $loop->index }}"
                                     type="radio"
                                     name="answers[{{ $clarification->getKey() }}]"
                                     value="{{ $option }}"
@@ -36,16 +38,18 @@
                     </div>
                 @else
                     <textarea
+                        id="clarification-{{ $clarification->getKey() }}"
                         name="answers[{{ $clarification->getKey() }}]"
                         rows="4"
                         maxlength="2000"
                         required
+                        aria-describedby="clarification-question-{{ $clarification->getKey() }} @if ($errors->has('answers.'.$clarification->getKey())) clarification-error-{{ $clarification->getKey() }} @endif"
                         class="mt-1 rounded-xl border-[1.5px] border-ink-300 p-3 text-sm leading-relaxed focus:border-brand-500 focus:outline-none focus:ring-3 focus:ring-brand-100"
                     >{{ old('answers.'.$clarification->getKey()) }}</textarea>
                 @endif
 
                 @error('answers.'.$clarification->getKey())
-                    <p class="text-xs text-critical">{{ $message }}</p>
+                    <p id="clarification-error-{{ $clarification->getKey() }}" class="text-xs text-critical">{{ $message }}</p>
                 @enderror
             </fieldset>
         @endforeach

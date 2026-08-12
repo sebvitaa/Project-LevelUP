@@ -107,6 +107,6 @@ class Activity extends Model
             return null;
         }
 
-        return $this->project->starts_on->copy()->addDays($this->early_finish);
+        return $this->project->starts_on->copy()->addDays($this->early_finish - 1);
     }
 }

@@ -11,6 +11,9 @@
             ])>
                 {{ $activity->is_critical ? 'Ruta crítica' : 'Holgura '.$activity->slack.' d' }}
             </span>
+            @if ($activity->isCompleted())
+                <span class="rounded-full bg-done/10 px-2.5 py-0.5 text-[11px] font-semibold text-done">✓ Completada</span>
+            @endif
         </div>
 
         <h2 class="text-[15px] font-semibold leading-tight tracking-tight">{{ $activity->name }}</h2>
@@ -88,7 +91,7 @@
         </div>
     @endif
 
-    <form method="POST" action="{{ route('activities.toggle', $activity) }}" class="mt-2">
+    <form method="POST" action="{{ route('activities.toggle', ['activity' => $activity, 'view' => $view ?? 'network']) }}" class="mt-2">
         @csrf
         <button type="submit" @class([
             'h-9 w-full rounded-lg text-sm font-semibold',

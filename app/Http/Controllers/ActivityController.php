@@ -7,6 +7,7 @@ use App\Models\Activity;
 use App\Services\Cpm\CpmCalculator;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Edición de actividades desde el panel lateral de la pantalla 06.
@@ -19,11 +20,16 @@ class ActivityController extends Controller
      */
     public function update(UpdateActivityRequest $request, Activity $activity, CpmCalculator $cpm): RedirectResponse
     {
-        $activity->update($request->validated());
+        DB::transaction(function () use ($activity, $request, $cpm): void {
+            $activity->update($request->validated());
+            $this->recalculate($activity, $cpm);
+        });
 
-        $this->recalculate($activity, $cpm);
-
-        return back()->with('status', 'Actividad actualizada.');
+        return redirect()->route('projects.show', [
+            'project' => $activity->loadMissing('project')->project,
+            'activity' => $activity->code,
+            'view' => in_array($request->query('view'), ['network', 'gantt'], true) ? $request->query('view') : 'network',
+        ])->with('status', 'Actividad actualizada.');
     }
 
     /**
@@ -34,11 +40,13 @@ class ActivityController extends Controller
     {
         $this->authorize('update', $activity->loadMissing('project')->project);
 
-        $activity->update([
-            'completed_at' => $activity->isCompleted() ? null : now(),
-        ]);
+        $activity->update(['completed_at' => $activity->isCompleted() ? null : now()]);
 
-        return back();
+        return redirect()->route('projects.show', [
+            'project' => $activity->project,
+            'activity' => $activity->code,
+            'view' => in_array($request->query('view'), ['network', 'gantt'], true) ? $request->query('view') : 'network',
+        ]);
     }
 
     /**
