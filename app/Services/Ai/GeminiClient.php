@@ -2,6 +2,7 @@
 
 namespace App\Services\Ai;
 
+use App\Enums\AiModel;
 use App\Exceptions\PlanGenerationException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
@@ -19,7 +20,6 @@ class GeminiClient
 {
     public function __construct(
         private readonly string $apiKey,
-        private readonly string $model,
         private readonly string $baseUrl,
         private readonly int $timeout,
     ) {}
@@ -27,14 +27,22 @@ class GeminiClient
     /**
      * Genera contenido estructurado y devuelve el JSON decodificado.
      *
+     * El modelo se recibe por llamada y no por constructor porque depende del
+     * plan del usuario dueño del proyecto, que cambia entre una generación y la
+     * siguiente.
+     *
      * @param  array<string, mixed>  $responseSchema
      * @return array<string, mixed>
      *
      * @throws PlanGenerationException
      */
-    public function generateJson(string $systemInstruction, string $userPrompt, array $responseSchema): array
-    {
-        $endpoint = "{$this->baseUrl}/models/{$this->model}:generateContent";
+    public function generateJson(
+        AiModel $model,
+        string $systemInstruction,
+        string $userPrompt,
+        array $responseSchema,
+    ): array {
+        $endpoint = "{$this->baseUrl}/models/{$model->geminiModel()}:generateContent";
 
         try {
             $response = Http::timeout($this->timeout)
@@ -60,8 +68,8 @@ class GeminiClient
 
         if ($response->failed()) {
             throw PlanGenerationException::apiUnavailable(
-            'la API respondió '.$response->status().
-            ' — '.$response->json('error.message', $response->body())
+                'la API respondió '.$response->status().
+                ' — '.$response->json('error.message', $response->body())
             );
         }
 

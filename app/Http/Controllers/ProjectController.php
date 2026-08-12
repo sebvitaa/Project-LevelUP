@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\AiModel;
 use App\Enums\ProjectGenerationStage;
 use App\Enums\ProjectStatus;
 use App\Http\Requests\StoreProjectRequest;
@@ -86,7 +87,7 @@ class ProjectController extends Controller
     {
         $this->authorize('update', $project);
 
-        DB::transaction(function () use ($project): void {
+        DB::transaction(function () use ($request, $project): void {
             $lockedProject = Project::query()
                 ->whereKey($project->getKey())
                 ->lockForUpdate()
@@ -97,6 +98,15 @@ class ProjectController extends Controller
             }
 
             $attempt = $lockedProject->generation_attempt + 1;
+
+            /*
+             * Regenerar es una generación nueva, así que vuelve a pasar por el
+             * plan vigente: si la contratación venció, el proyecto baja al modelo
+             * estándar en vez de seguir usando el avanzado para siempre.
+             */
+            $aiModel = $request->user()->canUseAiModel($lockedProject->ai_model)
+                ? $lockedProject->ai_model
+                : AiModel::Standard;
             $answeredClarifications = $lockedProject->clarifications()
                 ->where('generation_attempt', $lockedProject->generation_attempt)
                 ->whereNotNull('answered_at')
@@ -110,6 +120,7 @@ class ProjectController extends Controller
                     ? ProjectGenerationStage::RequestingPlan
                     : ProjectGenerationStage::AnalyzingBrief,
                 'generation_attempt' => $attempt,
+                'ai_model' => $aiModel,
                 'generation_error' => null,
                 'generation_started_at' => now(),
                 'generation_progressed_at' => now(),

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Enums\AiModel;
 use App\Enums\ProjectGenerationStage;
 use App\Enums\ProjectStatus;
 use App\Enums\ProjectType;
@@ -31,6 +32,7 @@ class Project extends Model
         'starts_on',
         'deadline',
         'team_size',
+        'ai_model',
         'status',
     ];
 
@@ -41,6 +43,7 @@ class Project extends Model
     {
         return [
             'type' => ProjectType::class,
+            'ai_model' => AiModel::class,
             'status' => ProjectStatus::class,
             'generation_stage' => ProjectGenerationStage::class,
             'starts_on' => 'date',

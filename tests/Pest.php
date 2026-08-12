@@ -19,6 +19,13 @@ pest()->extend(TestCase::class)
     ->in('Feature');
 
 /*
+ * Los tests unitarios necesitan la aplicación arrancada aunque no toquen la base:
+ * construir un modelo con casts a enum pasa por el contenedor. Sin esto reventaban
+ * con "Call to a member function connection() on null" antes de evaluar nada.
+ */
+pest()->extend(TestCase::class)->in('Unit');
+
+/*
 |--------------------------------------------------------------------------
 | Expectations
 |--------------------------------------------------------------------------

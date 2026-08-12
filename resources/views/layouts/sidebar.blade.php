@@ -50,10 +50,10 @@
     @endif
 
     <p class="{{ $navLabel }}">Cuenta</p>
-    <span class="{{ $navItem }} text-ink-400" title="Disponible en una próxima versión">
+    <a href="{{ route('account.plan') }}" class="{{ $navItem }} {{ request()->routeIs('account.plan') ? $navActive : $navIdle }}">
         <x-nav-icon name="plan" />
         Plan y consultas
-    </span>
+    </a>
     <span class="{{ $navItem }} text-ink-400" title="Disponible en una próxima versión">
         <x-nav-icon name="settings" />
         Configuración
@@ -70,6 +70,11 @@
         <span class="text-[11px] leading-snug text-ink-500">
             Se renuevan el {{ now()->addMonthNoOverflow()->startOfMonth()->translatedFormat('j \d\e F') }}.
         </span>
+        @if ($user !== null && ! $user->isOnProPlan())
+            <a href="{{ route('account.plan') }}" class="text-[11px] font-semibold text-brand-600 hover:text-brand-700">
+                Mejorar plan →
+            </a>
+        @endif
     </div>
 
     <form method="POST" action="{{ route('logout') }}">

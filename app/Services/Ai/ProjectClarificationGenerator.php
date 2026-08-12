@@ -26,6 +26,7 @@ class ProjectClarificationGenerator
     public function generate(Project $project, int $generationAttempt): ?bool
     {
         $payload = $this->client->generateJson(
+            $project->ai_model,
             $this->prompts->systemInstruction($project),
             $this->prompts->userPrompt($project),
             $this->prompts->responseSchema(),

@@ -37,7 +37,16 @@ return [
 
     'gemini' => [
         'key' => env('GEMINI_API_KEY'),
-        'model' => env('GEMINI_MODEL', 'gemini-3.1-flash-lite'),
+
+        /*
+         * Un modelo por calidad de plan. Las claves tienen que coincidir con los
+         * valores de App\Enums\AiModel.
+         */
+        'models' => [
+            'standard' => env('GEMINI_MODEL_STANDARD', env('GEMINI_MODEL', 'gemini-3.1-flash-lite')),
+            'advanced' => env('GEMINI_MODEL_ADVANCED', 'gemini-3.5-flash'),
+        ],
+
         'base_url' => env('GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com/v1beta'),
         'timeout' => (int) env('GEMINI_TIMEOUT', 60),
     ],

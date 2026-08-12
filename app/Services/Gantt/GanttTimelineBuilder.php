@@ -26,7 +26,7 @@ class GanttTimelineBuilder
         $last = $deadline !== null && $deadline->greaterThan($calculatedLast)
             ? $deadline
             : $calculatedLast;
-        $days = $start->diffInDays($last) + 1;
+        $days = (int) $start->diffInDays($last) + 1;
         $scale = $this->scaleFor($days);
         $dayWidth = match ($scale) {
             'day' => 40,
@@ -111,7 +111,7 @@ class GanttTimelineBuilder
                 $groups[$key] = [
                     'key' => $key,
                     'label' => $date->translatedFormat('F Y'),
-                    'offset' => $start->diffInDays($date),
+                    'offset' => (int) $start->diffInDays($date),
                     'duration' => 0,
                 ];
             }
@@ -133,7 +133,7 @@ class GanttTimelineBuilder
                     'label' => $date->format('j'),
                     'short_label' => $date->translatedFormat('D'),
                     'date' => $date->toDateString(),
-                    'offset' => $start->diffInDays($date),
+                    'offset' => (int) $start->diffInDays($date),
                     'duration' => 1,
                     'is_weekend' => $date->isWeekend(),
                 ])->all();
@@ -143,8 +143,8 @@ class GanttTimelineBuilder
         $columns = [];
         $cursor = $start->copy();
 
-        while ($start->diffInDays($cursor) < $days) {
-            $offset = $start->diffInDays($cursor);
+        while ((int) $start->diffInDays($cursor) < $days) {
+            $offset = (int) $start->diffInDays($cursor);
             $duration = $unit === 'week'
                 ? min(7, $days - $offset)
                 : min($cursor->daysInMonth - $cursor->day + 1, $days - $offset);
@@ -166,7 +166,7 @@ class GanttTimelineBuilder
      */
     private function marker($start, int $days, $date): array
     {
-        $offset = $start->diffInDays($date, false);
+        $offset = (int) $start->diffInDays($date, false);
 
         return [
             'date' => $date->toDateString(),
@@ -185,7 +185,7 @@ class GanttTimelineBuilder
             ->filter(fn ($date): bool => $date->isWeekend())
             ->map(fn ($date): array => [
                 'date' => $date->toDateString(),
-                'offset' => $start->diffInDays($date),
+                'offset' => (int) $start->diffInDays($date),
                 'duration' => 1,
             ])->values()->all();
     }

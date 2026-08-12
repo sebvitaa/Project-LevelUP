@@ -156,6 +156,53 @@ estados vacíos distintos para una cartera vacía y una consulta sin coincidenci
 `DashboardDemoSeeder` crea una cartera reproducible y reutiliza `DemoProjectSeeder`; no
 realiza llamadas a Gemini y puede ejecutarse repetidamente mediante `updateOrCreate`.
 
+### 2.12 Los ejemplos del formulario son parte del diseño del prompt
+
+`ProjectExamples` guarda 18 briefs, tres por cada `ProjectType`, y el botón de la pantalla 04
+rellena con uno de ellos el nombre, la descripción, ambas fechas y el tamaño del equipo.
+
+**Por qué:** la calidad de la malla depende casi por completo de cuánto contexto trae el brief.
+Al probar el prompt contra la API real (ver [`docs/prompt.md`](prompt.md)) la diferencia entre un
+brief de una línea y uno con entregables, proveedores y límites de alcance fue la diferencia entre
+una cadena lineal sin holgura y una malla con frentes paralelos. Los ejemplos están escritos con
+ese patrón, así que además de ahorrarle tipeo al usuario le enseñan qué nivel de detalle conviene
+escribir. Por eso viven en el servidor y no en el JS: son contenido del dominio, se validan en los
+tests contra las reglas de `StoreProjectRequest` y hay que revisarlos cuando cambie el prompt.
+
+Las fechas se guardan como desplazamientos en días y se resuelven al renderizar, para que un
+ejemplo no quede nunca con una fecha de inicio en el pasado.
+
+### 2.13 El plan decide la cuota y el modelo de IA
+
+`SubscriptionPlan` (gratis / Pro) define precio, generaciones mensuales y qué `AiModel`
+habilita. El plan Pro cuesta US$10, dura 30 días y sube la cuota de 20 a 200 generaciones.
+
+**El cobro está simulado.** No hay pasarela conectada y contratar no genera ningún cargo:
+`SubscriptionController@store` llama directo a `User::activateProPlan()`. Lo que sí está armado
+es todo lo demás —qué habilita el plan, cuánto dura, cómo se extiende y qué pasa al vencer—, así
+que enchufar una pasarela real es reemplazar ese método por el retorno del proveedor de pago y
+activar el plan recién con el pago confirmado. La pantalla lo dice explícitamente para que nadie
+crea que pagó.
+
+Cuatro decisiones que vale la pena tener claras:
+
+- **El plan vigente se calcula, no se lee.** `User::currentPlan()` degrada a `free` si
+  `plan_expires_at` ya pasó, en vez de depender de una tarea programada que limpie la columna.
+  Una contratación no renovada deja de dar acceso sola.
+- **El modelo se guarda en el proyecto, no se consulta al usuario al generar.** La generación es
+  asíncrona: entre el POST y el job el plan puede vencer, y un proyecto tiene que terminar de
+  generarse con el mismo modelo con el que empezó. Además queda registro de con qué se hizo cada
+  malla, que es justo lo que se necesita al comparar resultados (ver [`docs/prompt.md`](prompt.md)).
+- **Regenerar vuelve a pasar por el plan.** Es una generación nueva, así que si la contratación
+  venció el proyecto baja a `standard` en vez de conservar el modelo avanzado para siempre.
+- **El candado de la interfaz es cosmético.** El bloqueo real está en `StoreProjectRequest`, que
+  restringe los valores válidos de `ai_model` a los que habilita el plan del usuario. Deshabilitar
+  el radio en HTML no defiende de un POST hecho a mano.
+
+`AiModel` guarda la intención (`standard` / `advanced`) y no el identificador de Gemini, que vive
+en `config/services.php` bajo `services.gemini.models`. Así cambiar de modelo en Google es tocar
+el `.env` y no la base de datos.
+
 ---
 
 ## 3. Estructura de carpetas
@@ -166,8 +213,10 @@ esqueleto estándar de Laravel sin modificar.
 ```
 app/
 ├── Enums/
+│   ├── AiModel.php                Estándar · Avanzado, y el plan que exige cada uno
 │   ├── ProjectStatus.php          Draft · Clarifying · AwaitingInput · Generating · Ready · Failed
 │   ├── ProjectType.php            6 tipos + su contexto de dominio para el prompt
+│   ├── SubscriptionPlan.php       Gratis · Pro: precio, cuota y modelos habilitados
 │   └── ProjectGenerationStage.php  Hitos observables de la generación
 ├── Exceptions/
 │   └── PlanGenerationException.php  Errores de generación, con mensaje para el usuario
@@ -181,7 +230,8 @@ app/
 │   │   ├── DashboardController.php           Pantalla 02
 │   │   ├── ProjectController.php             POST del asistente + pantalla 06
 │   │   ├── ProjectGenerationController.php   Pantalla 05 + endpoint de estado
-│   │   └── ProjectWizardController.php       Pantallas 03 y 04
+│   │   ├── ProjectWizardController.php       Pantallas 03 y 04
+│   │   └── SubscriptionController.php        Plan: ver, contratar y cancelar
 │   └── Requests/
 │       ├── Auth/
 │       │   ├── LoginRequest.php              Validación + rate limiting por correo/IP
@@ -210,8 +260,9 @@ app/
     ├── Cpm/
         ├── CpmCalculator.php         Pasadas hacia adelante y atrás, holguras, layout
         └── ScheduledActivity.php     Resultado inmutable por actividad
-    └── Gantt/
-        └── GanttTimelineBuilder.php  Contrato temporal y filas para la vista Gantt
+    ├── Gantt/
+    │   └── GanttTimelineBuilder.php  Contrato temporal y filas para la vista Gantt
+    └── ProjectExamples.php           18 briefs de ejemplo (3 por tipo) para la pantalla 04
 
 database/
 ├── factories/
@@ -240,9 +291,10 @@ docs/
 resources/
 ├── css/app.css                       Tokens de marca, animación y reduced motion
 ├── js/
-│   ├── app.js                         Entradas de watcher y scroll CPM
+│   ├── app.js                         Entradas de watcher, scroll CPM y ejemplos
 │   ├── generation-watcher.js          Polling robusto de la pantalla 05
-│   └── cpm-graph.js                   Centrado progresivo de la actividad seleccionada
+│   ├── cpm-graph.js                   Centrado progresivo de la actividad seleccionada
+│   └── prompt-examples.js             Botón que rellena el formulario de la pantalla 04
 └── views/
     ├── auth/
     │   ├── login.blade.php           Pantalla 01
@@ -255,6 +307,8 @@ resources/
     ├── dashboard/
     │   ├── index.blade.php           Pantalla 02
     │   └── partials/project-card.blade.php
+    ├── account/
+    │   └── plan.blade.php            Comparación de planes y contratación simulada
     ├── layouts/
     │   └── sidebar.blade.php         Navegación lateral + medidor de consultas
     └── projects/
@@ -276,6 +330,8 @@ tests/
 │   ├── ExampleTest.php               Redirección de la raíz
 │   ├── ProjectScreenTest.php         Humo sobre la malla + recálculo al editar
 │   ├── ProjectWizardTest.php         Asistente, validación y autorización
+│   ├── ProjectExamplesTest.php       Los 18 briefs de ejemplo y su entrega a la vista
+│   ├── SubscriptionTest.php          Plan, bloqueo del modelo avanzado y vencimiento
 │   ├── ProjectClarificationFlowTest.php Análisis, transición, validación y prompt final
 │   ├── ProjectClarificationModelTest.php Estados, casts, relación y filtro por intento vigente
 │   ├── ProjectGenerationStatusTest.php Contrato de progreso y estados del watcher
@@ -322,6 +378,7 @@ users ──1:N──> projects ──1:N──> activities ──N:M──> act
 | `starts_on` | date | Día 0 de la malla |
 | `deadline` | date, nullable | Fecha deseada, para comparar con lo proyectado |
 | `team_size` | smallint, nullable | Contexto para la IA |
+| `ai_model` | string | Casteado a `AiModel`; con qué calidad se generó. Por defecto `standard` |
 | `status` | string | Casteado a `ProjectStatus` |
 | `generation_stage` | string, nullable | Casteado a `ProjectGenerationStage`; hito observable actual |
 | `generation_attempt` | unsigned integer | Intento vigente; default `0` |
@@ -384,8 +441,17 @@ Aristas del grafo. `activity_id` no puede empezar hasta que `predecessor_id` ter
 
 ### `users` (columnas agregadas)
 
-`ai_credits_limit` (default 20), `ai_credits_used` (default 0), `ai_credits_reset_at`.
-Son la base del plan de suscripción por consultas.
+| Columna | Tipo | Notas |
+|---|---|---|
+| `plan` | string | Casteado a `SubscriptionPlan`. Por defecto `free` |
+| `plan_expires_at` | timestamp, nullable | Hasta cuándo vale la contratación; `null` en el plan gratis |
+| `ai_credits_limit` | smallint | Cuota del plan: 20 en gratis, 200 en Pro |
+| `ai_credits_used` | smallint | Generaciones consumidas en el período |
+| `ai_credits_reset_at` | timestamp, nullable | Reinicio de la cuota (tarea programada pendiente) |
+
+`plan` sola no basta para decidir accesos: hay que pasar por `User::currentPlan()`, que
+degrada a `free` cuando `plan_expires_at` ya pasó. Así una contratación no renovada deja de
+dar acceso al modelo avanzado sin necesidad de un job que limpie la columna.
 
 **Nota:** al agregar una columna con valor por defecto en la base, hay que reflejarla
 también en la factory correspondiente. Con `Model::shouldBeStrict()` activo, un modelo
@@ -418,6 +484,9 @@ Todas en `routes/web.php`. Las URL están en español porque son visibles para e
 | `DELETE` | `/projects/{project}` | `projects.destroy` | 06 |
 | `PATCH` | `/activities/{activity}` | `activities.update` | 06 |
 | `POST` | `/activities/{activity}/completar` | `activities.toggle` | 06 |
+| `GET` | `/cuenta/plan` | `account.plan` | Plan |
+| `POST` | `/cuenta/plan` | `account.plan.store` | Plan (contratar/renovar) |
+| `DELETE` | `/cuenta/plan` | `account.plan.destroy` | Plan (volver a gratis) |
 
 `projects.show` admite `view=network|gantt`; `activity={code}` conserva la selección al cambiar
 de vista y después de editar o completar una actividad. El endpoint de estado de la pantalla 05
@@ -477,7 +546,8 @@ Clases con una responsabilidad cada una:
   disponibles hasta el plazo) y el `responseSchema`.
 - **`GeminiClient`** solo habla HTTP: `POST {base_url}/models/{model}:generateContent`
   con la clave en el header `x-goog-api-key`, y devuelve el JSON decodificado. Se falsea
-  en los tests con `Http::fake()`.
+  en los tests con `Http::fake()`. El modelo se recibe **por llamada** y no por constructor,
+  porque depende del plan del dueño del proyecto (ver 2.13).
 - **`ProjectPlanGenerator`** valida la forma de la respuesta, llama al `CpmCalculator` y
   guarda todo en una transacción.
 - **`ClarificationPromptBuilder`** y **`ProjectClarificationGenerator`** hacen la primera
@@ -554,6 +624,9 @@ GEMINI_TIMEOUT=60
   simultáneas, aplica timeout/backoff, pausa con la pestaña oculta, actualiza el mensaje, la barra
   y los cinco pasos visibles, y recarga una vez al detectar `needs_input`. `cpm-graph.js` centra el
   nodo seleccionado dentro del viewport sin desplazar la página y respeta `prefers-reduced-motion`.
+  `prompt-examples.js` rellena el formulario de la pantalla 04 con uno de los tres ejemplos del
+  tipo elegido, al azar y sin repetir el anterior. El botón se renderiza oculto y lo muestra el
+  propio script, para que no quede un botón muerto si el bundle no cargó.
 - **Estados de la pantalla 05:** Blade renderiza una rama distinta para `AwaitingInput`,
   `Failed`, `Ready` y trabajo activo. El trabajo activo muestra el hito persistido, el paso
   actual y una advertencia si `is_stalled` está activo; la respuesta de preguntas no depende de JS.
@@ -588,6 +661,8 @@ La suite se ejecuta con `php artisan test --compact`.
 | `Feature/AuthenticationTest.php` | Login correcto e incorrecto, registro, logout, rutas protegidas |
 | `Feature/DashboardTest.php` | Aislamiento por usuario, cálculo del % de avance, estado vacío |
 | `Feature/ProjectWizardTest.php` | Los dos pasos, validaciones, encolado con intento, regeneración desde fallo, regeneración activa y autorización |
+| `Feature/ProjectExamplesTest.php` | Tres ejemplos por tipo, todos distintos, todos válidos contra `StoreProjectRequest`, fechas nunca en el pasado y JSON parseable en `data-examples` |
+| `Feature/SubscriptionTest.php` | Contratar, renovar extendiendo desde el vencimiento, cancelar, contratación vencida tratada como gratis, rechazo del modelo avanzado sin plan, modelo persistido en el proyecto, endpoint de Gemini correcto y degradación al regenerar |
 | `Feature/ScheduleGenerationTest.php` | Integración completa con `Http::fake()`: malla guardada, dependencias, cobro único y atómico, API caída, plan circular, regeneración y jobs antiguos |
 | `Feature/ProjectScreenTest.php` | Renderizado de la malla, selección de actividad, marcar hecha, recálculo del CPM al editar una duración |
 | `Unit/ProjectGenerationStageTest.php` | Valores ordenados de las etapas, etapa terminal y casts/defaults de metadata |
@@ -666,6 +741,11 @@ pendientes de decisión del equipo:
       Ver [`docs/prompt.md`](prompt.md) §5.
 - [ ] Elegir el modelo de producción con la cuota en mente: el free tier de `gemini-3.5-flash`
       permite 20 requests por día para toda la aplicación y cada proyecto gasta 2.
-- [ ] Arreglar los cuatro tests que fallan desde antes del ajuste de prompts, la inestabilidad por
-      orden de ejecución de `ScheduleGenerationTest` y el arranque de los tests de `tests/Unit`,
-      que hoy no cargan la aplicación. Detalle en [`docs/prompt.md`](prompt.md) §5.
+- [ ] Arreglar los cuatro tests que fallan desde antes del ajuste de prompts. Detalle en
+      [`docs/prompt.md`](prompt.md) §5.
+- [x] Estabilizar `ScheduleGenerationTest`: la factory elegía el tipo al azar y el plan de prueba
+      de 8 actividades quedaba fuera del rango de Construcción.
+- [x] Arrancar la aplicación en los tests de `tests/Unit`, que antes reventaban antes de asertar.
+- [ ] Cobro real del plan Pro: hoy la contratación está simulada y no hay pasarela conectada
+      (ver 2.13).
+- [ ] Reinicio de la cuota al renovar el período del plan, junto con `ai_credits_reset_at`.

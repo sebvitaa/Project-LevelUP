@@ -42,6 +42,7 @@ class ProjectPlanGenerator
         ]);
 
         $payload = $this->client->generateJson(
+            $project->ai_model,
             $this->prompts->systemInstruction($project),
             $this->prompts->userPrompt($project, $generationAttempt),
             $this->prompts->responseSchema(),

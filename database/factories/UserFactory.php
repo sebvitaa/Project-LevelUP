@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Enums\SubscriptionPlan;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Facades\Hash;
@@ -32,7 +33,9 @@ class UserFactory extends Factory
             'remember_token' => Str::random(10),
             // Espeja los valores por defecto de la migración para que el modelo
             // en memoria tenga los mismos atributos que uno leído de la base.
-            'ai_credits_limit' => 20,
+            'plan' => SubscriptionPlan::Free,
+            'plan_expires_at' => null,
+            'ai_credits_limit' => SubscriptionPlan::Free->monthlyCredits(),
             'ai_credits_used' => 0,
         ];
     }
@@ -51,7 +54,27 @@ class UserFactory extends Factory
     public function withoutAiCredits(): static
     {
         return $this->state(fn (array $attributes) => [
-            'ai_credits_used' => $attributes['ai_credits_limit'] ?? 20,
+            'ai_credits_used' => $attributes['ai_credits_limit'] ?? SubscriptionPlan::Free->monthlyCredits(),
+        ]);
+    }
+
+    /** Usuario con el plan Pro vigente: accede al modelo avanzado. */
+    public function pro(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'plan' => SubscriptionPlan::Pro,
+            'plan_expires_at' => now()->addDays(SubscriptionPlan::PRO_PERIOD_DAYS),
+            'ai_credits_limit' => SubscriptionPlan::Pro->monthlyCredits(),
+        ]);
+    }
+
+    /** Contrató el plan Pro pero ya se le venció: vuelve a las reglas del gratis. */
+    public function expiredPro(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'plan' => SubscriptionPlan::Pro,
+            'plan_expires_at' => now()->subDay(),
+            'ai_credits_limit' => SubscriptionPlan::Pro->monthlyCredits(),
         ]);
     }
 }

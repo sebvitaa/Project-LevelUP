@@ -19,7 +19,6 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->app->singleton(GeminiClient::class, fn (): GeminiClient => new GeminiClient(
             apiKey: (string) config('services.gemini.key'),
-            model: (string) config('services.gemini.model'),
             baseUrl: (string) config('services.gemini.base_url'),
             timeout: (int) config('services.gemini.timeout'),
         ));

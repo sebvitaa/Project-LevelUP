@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\AiModel;
 use App\Enums\ProjectType;
+use App\Services\ProjectExamples;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -40,7 +42,7 @@ class ProjectWizardController extends Controller
     }
 
     /** Pantalla 04 — descripción del proyecto (prompt). */
-    public function prompt(Request $request): View|RedirectResponse
+    public function prompt(Request $request, ProjectExamples $examples): View|RedirectResponse
     {
         $type = ProjectType::tryFrom((string) session(self::SESSION_KEY));
 
@@ -48,10 +50,15 @@ class ProjectWizardController extends Controller
             return redirect()->route('projects.create.type');
         }
 
+        $user = $request->user();
+
         return view('projects.create-prompt', [
             'type' => $type,
-            'remainingCredits' => $request->user()->remainingAiCredits(),
-            'creditLimit' => $request->user()->ai_credits_limit,
+            'examples' => $examples->forType($type),
+            'aiModels' => AiModel::cases(),
+            'currentPlan' => $user->currentPlan(),
+            'remainingCredits' => $user->remainingAiCredits(),
+            'creditLimit' => $user->ai_credits_limit,
         ]);
     }
 }

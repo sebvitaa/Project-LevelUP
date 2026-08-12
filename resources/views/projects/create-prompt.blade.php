@@ -35,17 +35,26 @@
             @enderror
         </div>
 
-        <div class="flex flex-col gap-1.5">
-            <label for="prompt" class="text-xs font-semibold text-ink-700">Descripción del proyecto</label>
+        <div class="flex flex-col gap-1.5" id="prompt-examples" data-examples="{{ json_encode($examples) }}">
+            <div class="flex items-baseline justify-between gap-3">
+                <label for="prompt" class="text-xs font-semibold text-ink-700">Descripción del proyecto</label>
+                <button type="button" data-example-trigger
+                        class="hidden text-xs font-semibold text-brand-600 hover:text-brand-700 focus:outline-none focus:ring-3 focus:ring-brand-100">
+                    Probar con un ejemplo
+                </button>
+            </div>
             <textarea id="prompt" name="prompt" rows="7" required minlength="40" maxlength="4000"
                       placeholder="Necesito lanzar la app móvil de banca personal para iOS y Android. Parte con el levantamiento de requerimientos…"
                       class="rounded-xl border-[1.5px] border-ink-300 p-4 text-sm leading-relaxed focus:border-brand-500 focus:outline-none focus:ring-3 focus:ring-brand-100">{{ old('prompt') }}</textarea>
             @error('prompt')
                 <p class="text-xs text-critical">{{ $message }}</p>
             @enderror
-            <p class="num text-[11px] text-ink-500">
-                Consulta {{ $creditLimit - $remainingCredits + 1 }} de {{ $creditLimit }}
-            </p>
+            <div class="flex items-baseline justify-between gap-3">
+                <p class="num text-[11px] text-ink-500">
+                    Consulta {{ $creditLimit - $remainingCredits + 1 }} de {{ $creditLimit }}
+                </p>
+                <p class="text-[11px] text-ink-500" data-example-status role="status" aria-live="polite"></p>
+            </div>
         </div>
 
         <div class="flex flex-col gap-2.5">
@@ -78,6 +87,48 @@
                 </div>
             </div>
         </div>
+
+        <fieldset class="flex flex-col gap-2.5">
+            <legend class="text-[11px] font-semibold uppercase tracking-wider text-ink-500">Modelo de IA</legend>
+            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                @foreach ($aiModels as $model)
+                    @php($locked = ! $currentPlan->allows($model))
+                    <label @class([
+                        'flex cursor-pointer items-start gap-3 rounded-xl border-[1.5px] p-3.5 transition',
+                        'border-ink-300 hover:border-brand-400' => ! $locked,
+                        'cursor-not-allowed border-ink-200 bg-ink-50' => $locked,
+                    ])>
+                        <input type="radio" name="ai_model" value="{{ $model->value }}" class="mt-0.5 accent-brand-500"
+                               @checked(old('ai_model', \App\Enums\AiModel::Standard->value) === $model->value)
+                               @disabled($locked)>
+                        <span class="flex flex-col gap-0.5">
+                            <span @class([
+                                'flex items-center gap-1.5 text-sm font-semibold',
+                                'text-ink-900' => ! $locked,
+                                'text-ink-500' => $locked,
+                            ])>
+                                {{ $model->label() }}
+                                @if ($locked)
+                                    <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true" class="size-3.5">
+                                        <path d="M4.5 7V5a3.5 3.5 0 1 1 7 0v2H12a1 1 0 0 1 1 1v5a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1h.5Zm1.5 0h4V5a2 2 0 1 0-4 0v2Z"/>
+                                    </svg>
+                                @endif
+                            </span>
+                            <span class="text-xs text-ink-500">{{ $model->description() }}</span>
+                            @if ($locked)
+                                <a href="{{ route('account.plan') }}"
+                                   class="mt-0.5 text-xs font-semibold text-brand-600 hover:text-brand-700">
+                                    Requiere el plan {{ $model->requiredPlan()->label() }} · Mejorar plan
+                                </a>
+                            @endif
+                        </span>
+                    </label>
+                @endforeach
+            </div>
+            @error('ai_model')
+                <p class="text-xs text-critical">{{ $message }}</p>
+            @enderror
+        </fieldset>
 
         <div class="flex items-center justify-between border-t border-ink-200 pt-4">
             <a href="{{ route('projects.create.type') }}" class="text-sm font-semibold text-ink-500 hover:text-ink-900">

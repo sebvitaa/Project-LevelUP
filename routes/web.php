@@ -4,10 +4,11 @@ use App\Http\Controllers\ActivityController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\RegisteredUserController;
 use App\Http\Controllers\DashboardController;
-use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ProjectClarificationController;
+use App\Http\Controllers\ProjectController;
 use App\Http\Controllers\ProjectGenerationController;
 use App\Http\Controllers\ProjectWizardController;
+use App\Http\Controllers\SubscriptionController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -66,4 +67,9 @@ Route::middleware('auth')->group(function () {
     // Panel lateral de la pantalla 06
     Route::patch('/activities/{activity}', [ActivityController::class, 'update'])->name('activities.update');
     Route::post('/activities/{activity}/completar', [ActivityController::class, 'toggleCompletion'])->name('activities.toggle');
+
+    // Plan de suscripción (contratación simulada, sin pasarela de pago)
+    Route::get('/cuenta/plan', [SubscriptionController::class, 'show'])->name('account.plan');
+    Route::post('/cuenta/plan', [SubscriptionController::class, 'store'])->name('account.plan.store');
+    Route::delete('/cuenta/plan', [SubscriptionController::class, 'destroy'])->name('account.plan.destroy');
 });

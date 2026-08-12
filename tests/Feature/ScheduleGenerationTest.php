@@ -1,6 +1,8 @@
 <?php
 
+use App\Enums\ProjectGenerationStage;
 use App\Enums\ProjectStatus;
+use App\Enums\ProjectType;
 use App\Jobs\GenerateProjectSchedule;
 use App\Models\Project;
 use App\Models\User;
@@ -41,7 +43,17 @@ function samplePlan(): array
 
 beforeEach(function () {
     $this->user = User::factory()->create();
-    $this->project = Project::factory()->generating()->for($this->user)->create();
+
+    /*
+     * El tipo se fija a propósito: la factory lo elige al azar y `samplePlan()`
+     * tiene 8 actividades, que quedan fuera del rango de Construcción (15–40).
+     * Sin fijarlo, uno de cada seis proyectos hacía fallar la validación y estos
+     * tests caían de forma intermitente.
+     */
+    $this->project = Project::factory()
+        ->generating()
+        ->for($this->user)
+        ->create(['type' => ProjectType::Software]);
 });
 
 it('guarda la malla con la ruta crítica ya resuelta', function () {
@@ -53,7 +65,7 @@ it('guarda la malla con la ruta crítica ya resuelta', function () {
     $this->project->refresh();
 
     expect($this->project->status)->toBe(ProjectStatus::Ready)
-        ->and($this->project->generation_stage)->toBe(\App\Enums\ProjectGenerationStage::Complete)
+        ->and($this->project->generation_stage)->toBe(ProjectGenerationStage::Complete)
         ->and($this->project->charged_generation_attempt)->toBe($this->project->generation_attempt)
         ->and($this->project->total_duration_days)->toBe(39)
         ->and($this->project->activities)->toHaveCount(8);

@@ -283,20 +283,51 @@ No se tocaron; quedan anotados porque salieron de estas pruebas.
      `Cache-Control: no-store` y llega `no-store, private`
    - `ProjectGenerationStatusTest::it marca como estancada una generación activa sin progreso
      reciente`
-4. **`ScheduleGenerationTest` es inestable.** Falla o pasa según el orden de ejecución: aislado
-   pasa 13/13, dentro de la suite completa a veces caen 1 o 2 casos, y no siempre los mismos.
-   Hay estado compartido entre tests.
-5. **Los tests de `tests/Unit` no arrancan la aplicación.** `tests/Pest.php:17-19` solo aplica
-   `TestCase` `->in('Feature')`, así que `Unit/ClarificationPromptBuilderTest.php` revienta con
-   *"Call to a member function connection() on null"* al construir el `Project` (el cast a
-   `ProjectType` necesita el contenedor) y **nunca llega a evaluar sus aserciones**. Se
-   verificaron las cuatro aserciones a mano con la app cargada y las cuatro pasan. Arreglarlo
-   de verdad es agregar `pest()->extend(TestCase::class)->in('Unit')`, que queda fuera del
-   alcance de este cambio.
+4. ~~**`ScheduleGenerationTest` es inestable.**~~ **Resuelto.** El diagnóstico inicial («hay
+   estado compartido entre tests») era incorrecto. La causa real: `ProjectFactory` elige el tipo
+   de proyecto **al azar**, y el plan de prueba `samplePlan()` tiene 8 actividades, que quedan
+   fuera del rango de `ProjectType::Construction` (15–40). Cuando la factory sacaba Construcción
+   —una de cada seis veces— la validación rechazaba el plan y caían los asserts de malla
+   guardada, cobro de crédito y mensaje de error. Se corrigió fijando el tipo en el `beforeEach`
+   de `tests/Feature/ScheduleGenerationTest.php`; el archivo pasa 13/13 de forma consistente.
+5. ~~**Los tests de `tests/Unit` no arrancan la aplicación.**~~ **Resuelto.** `tests/Pest.php`
+   solo aplicaba `TestCase` `->in('Feature')`, así que nueve tests unitarios reventaban con
+   *"Call to a member function connection() on null"* antes de evaluar una sola aserción. Se
+   agregó `pest()->extend(TestCase::class)->in('Unit')` (sin `RefreshDatabase`, que no hace
+   falta). Eso destapó además un error real que llevaba tiempo escondido: `GanttTimelineBuilder`
+   devolvía `float` en campos que su propio contrato declara `int`, porque `Carbon::diffInDays()`
+   devuelve float en Carbon 3. Se corrigió con casts explícitos.
 
 ---
 
-## 6. Cómo repetir las pruebas
+## 6. Los ejemplos del formulario salen de acá
+
+`app/Services/ProjectExamples.php` guarda 18 briefs (3 por `ProjectType`) que el botón «Probar
+con un ejemplo» de la pantalla 04 carga en el formulario. Están escritos con el patrón de los
+escenarios que mejor rindieron en estas pruebas:
+
+- entregables concretos en vez de una intención general;
+- proveedores, integraciones y tecnologías con nombre;
+- límites de alcance explícitos («no incluye migración de datos históricos»);
+- varios frentes que pueden avanzar en paralelo, que es lo que da holgura a la malla;
+- esperas externas mencionadas (fabricación en taller, aprobación de un comité, importación),
+  que es de donde sale el paralelismo cuando el equipo es chico;
+- un plazo coherente con el alcance.
+
+Diez de los 18 son adaptaciones directas de escenarios de la batería: `Portal de pagos`,
+`App de reservas`, `Flota GPS`, `Edificio Los Aromos`, `Bodega industrial`, `Titulación 2026`,
+`Feria laboral`, `Tesis de magíster`, `Lanzamiento Verano` y `Mudanza`. Los demás siguen el mismo
+patrón pero **todavía no se han probado contra la API**, porque la cuota diaria se agotó durante
+estas pruebas. Al validarlos conviene mirar `parallel_pct`, `terminals` y `count` contra el rango
+del tipo, que es donde aparecieron los problemas.
+
+Los 18 se validan en `tests/Feature/ProjectExamplesTest.php` contra las reglas de
+`StoreProjectRequest`, así que un ejemplo mal escrito no puede llegar a producción como error de
+validación en la cara del usuario.
+
+---
+
+## 7. Cómo repetir las pruebas
 
 El banco de escenarios se corrió desde un script temporal fuera del repositorio, así que no
 quedó versionado. Para reconstruirlo, lo mínimo es:

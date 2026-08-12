@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Enums\AiModel;
 use App\Enums\ProjectGenerationStage;
 use App\Enums\ProjectStatus;
 use App\Enums\ProjectType;
@@ -29,6 +30,7 @@ class ProjectFactory extends Factory
             'starts_on' => $startsOn,
             'deadline' => fake()->dateTimeBetween($startsOn, '+6 months'),
             'team_size' => fake()->numberBetween(2, 12),
+            'ai_model' => AiModel::Standard,
             'status' => ProjectStatus::Draft,
             'generation_stage' => null,
             'generation_attempt' => 0,
