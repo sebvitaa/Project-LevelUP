@@ -80,8 +80,9 @@ la tabla `projects` recién nace en el paso 2.
 ### 2.6 El progreso de generación se registra como metadata del proyecto
 
 El proyecto conserva el hito actual, el número de intento y las marcas de tiempo de inicio y
-progreso. `ProjectGenerationStage` limita los valores posibles a hitos observables del backend;
-el porcentaje y las transiciones se implementarán en las unidades siguientes.
+progreso. `ProjectGenerationStage` limita los valores posibles a hitos observables del backend.
+El endpoint de estado traduce cada hito a un paso visible, timestamp, mensaje, necesidad de input
+y alerta de estancamiento sin inventar progreso temporal.
 
 **Por qué:** el polling necesita distinguir un trabajo activo, un intento antiguo y un proceso
 estancado sin inventar progreso basado en tiempo ni duplicar el estado en otra tabla.
@@ -243,6 +244,9 @@ worker de desarrollo con timeout finito.
 Archivos propios de la Fase 3: `app/Http/Controllers/ProjectClarificationController.php`,
 `app/Http/Requests/StoreProjectClarificationAnswersRequest.php` y
 `resources/views/projects/partials/clarifications-form.blade.php`.
+
+Configuración de Fase 4: `config/levelup.php` define `GENERATION_STALLED_AFTER`, el umbral en
+segundos para informar que una generación activa no ha registrado progreso.
 
 ---
 
@@ -447,6 +451,11 @@ El job mantiene timeout de 120 segundos y las conexiones de cola usan `retry_aft
 segundos por defecto. En desarrollo, `composer run dev` inicia `queue:listen` con timeout finito
 de 120 segundos; `retry_after` debe permanecer por encima de ese límite.
 
+`ProjectGenerationController@status` devuelve `status`, `stage`, `step_index`, `step_count`,
+`message`, `is_terminal`, `needs_input`, `started_at`, `last_progress_at`, `is_stalled`, `error`
+y `redirect_to`. La respuesta lleva `Cache-Control: no-store`; el estancamiento solo informa, no
+despacha jobs adicionales.
+
 ### Configuración
 
 En `config/services.php`, leyendo del `.env`:
@@ -472,6 +481,9 @@ GEMINI_TIMEOUT=60
   salen de `grid_column` / `grid_row`, que ya vienen calculados desde el servidor.
 - **JavaScript, lo mínimo:** solo el *polling* de la pantalla 05. No hay framework de
   frontend.
+- **Estados de la pantalla 05:** Blade renderiza una rama distinta para `AwaitingInput`,
+  `Failed`, `Ready` y trabajo activo. El trabajo activo muestra el hito persistido, el paso
+  actual y una advertencia si `is_stalled` está activo; la respuesta de preguntas no depende de JS.
 - **Accesibilidad:** la ruta crítica se distingue por color **y** por grosor de trazo, más
   la etiqueta textual "crítica" en cada nodo. El color por sí solo no basta.
 
@@ -495,6 +507,7 @@ La suite se ejecuta con `php artisan test --compact`.
 | `Feature/ProjectClarificationModelTest.php` | Estados, casts, relación y filtro de preguntas por intento vigente |
 | `Feature/ProjectClarificationFlowTest.php` | Análisis sin cobro, 0 o 1–3 preguntas, transición, intentos antiguos y respuestas en el prompt final |
 | `Feature/ProjectClarificationAnswersTest.php` | Formulario, autorización, respuestas completas, selects e ids ajenos |
+| `Feature/ProjectGenerationStatusTest.php` | Contrato JSON, no-store, fases, estados de input, estancamiento y autorización |
 
 **Cuidado con `Model::shouldBeStrict()`** (activo fuera de producción): detecta *lazy
 loading* y atributos faltantes. Donde un modelo llega por *route model binding* y necesita

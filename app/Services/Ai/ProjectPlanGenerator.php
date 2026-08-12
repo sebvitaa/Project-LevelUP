@@ -33,6 +33,8 @@ class ProjectPlanGenerator
      */
     public function generate(Project $project, int $generationAttempt): bool
     {
+        $this->markProgress($project, $generationAttempt, ProjectGenerationStage::RequestingPlan);
+
         $project->load([
             'clarifications' => fn ($query) => $query
                 ->where('generation_attempt', $generationAttempt)
@@ -45,9 +47,11 @@ class ProjectPlanGenerator
             $this->prompts->responseSchema(),
         );
 
+        $this->markProgress($project, $generationAttempt, ProjectGenerationStage::ValidatingPlan);
         $activities = $this->validatePlan($payload, $project);
 
         try {
+            $this->markProgress($project, $generationAttempt, ProjectGenerationStage::CalculatingCpm);
             $schedule = $this->cpm->calculate(array_map(
                 fn (array $activity): array => [
                     'code' => $activity['code'],
@@ -60,7 +64,24 @@ class ProjectPlanGenerator
             throw PlanGenerationException::invalidGraph($e->getMessage());
         }
 
+        $this->markProgress($project, $generationAttempt, ProjectGenerationStage::Persisting);
+
         return $this->persist($project, $activities, $schedule, $generationAttempt);
+    }
+
+    private function markProgress(
+        Project $project,
+        int $generationAttempt,
+        ProjectGenerationStage $stage,
+    ): void {
+        Project::query()
+            ->whereKey($project->getKey())
+            ->where('generation_attempt', $generationAttempt)
+            ->where('status', ProjectStatus::Generating->value)
+            ->update([
+                'generation_stage' => $stage->value,
+                'generation_progressed_at' => now(),
+            ]);
     }
 
     /**
